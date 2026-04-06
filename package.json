@@ -1,44 +1,115 @@
 {
-  "name": "microsoft-opentelemetry",
+  "name": "@microsoft/opentelemetry",
+  "author": "Microsoft Corporation",
   "version": "0.1.0",
   "description": "Microsoft OpenTelemetry distribution for JavaScript/TypeScript",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "main": "./dist/commonjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/commonjs/index.d.ts",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
+    "build": "npm run clean && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json",
+    "clean": "rimraf dist",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "format": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
+    "format:fix": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rimraf dist"
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Azure/opentelemetry-distro-javascript"
   },
   "keywords": [
-    "azure",
+    "node",
     "microsoft",
+    "azure",
+    "monitor",
     "opentelemetry",
-    "observability",
-    "telemetry",
-    "tracing",
-    "metrics",
-    "logging"
+    "distro",
+    "javascript",
+    "typescript"
   ],
-  "author": "Microsoft Corporation",
-  "license": "MIT",
-  "engines": {
-    "node": ">=18"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "eslint": "^9.0.0",
-    "rimraf": "^6.0.0",
-    "typescript": "~5.8.0",
-    "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.d.ts",
+        "default": "./dist/commonjs/index.js"
+      }
+    },
+    "./loader": {
+      "import": {
+        "types": "./dist/esm/loader.d.ts",
+        "default": "./dist/esm/loader.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/loader.d.ts",
+        "default": "./dist/commonjs/loader.js"
+      }
+    }
   },
   "dependencies": {
-    "@azure/monitor-opentelemetry": "^1.16.0"
-  }
+    "@azure-rest/core-client": "^2.5.1",
+    "@azure/core-auth": "^1.10.1",
+    "@azure/core-rest-pipeline": "^1.22.2",
+    "@azure/functions-opentelemetry-instrumentation": "^0.3.0",
+    "@azure/logger": "^1.3.0",
+    "@azure/monitor-opentelemetry-exporter": "1.0.0-beta.39",
+    "@azure/opentelemetry-instrumentation-azure-sdk": "^1.0.0-beta.9",
+    "@microsoft/applicationinsights-web-snippet": "^1.2.3",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.208.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/instrumentation": "^0.208.0",
+    "@opentelemetry/instrumentation-bunyan": "^0.54.0",
+    "@opentelemetry/instrumentation-http": "^0.208.0",
+    "@opentelemetry/instrumentation-mongodb": "^0.61.0",
+    "@opentelemetry/instrumentation-mysql": "^0.54.0",
+    "@opentelemetry/instrumentation-pg": "^0.61.0",
+    "@opentelemetry/instrumentation-redis": "^0.57.0",
+    "@opentelemetry/instrumentation-winston": "^0.53.0",
+    "@opentelemetry/resource-detector-azure": "^0.20.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-logs": "^0.208.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@opentelemetry/winston-transport": "^0.19.0",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@azure/functions": "^4.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.204.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.204.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-istanbul": "^3.0.0",
+    "dotenv": "^16.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "sideEffects": false
 }

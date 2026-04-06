@@ -1,0 +1,122 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+/* eslint-disable no-underscore-dangle*/
+
+import fs from "node:fs";
+import path from "node:path";
+import type {
+  BrowserSdkLoaderOptions,
+  AzureMonitorOpenTelemetryOptions,
+  InstrumentationOptions,
+} from "../types.js";
+import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
+import { Logger } from "./logging/index.js";
+import { dirName } from "./module.js";
+
+/**
+ * Walk up from a starting directory until a directory containing package.json is found.
+ * Falls back to the starting directory if no package.json is located.
+ * @internal
+ */
+function findPackageRoot(startDir: string): string {
+  let current = path.resolve(startDir);
+  while (true) {
+    if (fs.existsSync(path.join(current, "package.json"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      // Reached filesystem root without finding package.json
+      return startDir;
+    }
+    current = parent;
+  }
+}
+
+const ENV_CONFIGURATION_FILE = "APPLICATIONINSIGHTS_CONFIGURATION_FILE";
+const ENV_CONTENT = "APPLICATIONINSIGHTS_CONFIGURATION_CONTENT";
+
+/**
+ * Azure Monitor OpenTelemetry Client Configuration through JSON File
+ * @internal
+ */
+export class JsonConfig implements AzureMonitorOpenTelemetryOptions {
+  /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
+  public samplingRatio?: number;
+  /** The maximum number of spans to sample per second. */
+  public tracesPerSecond?: number;
+  /** Azure Monitor Exporter Configuration */
+  public azureMonitorExporterOptions?: AzureMonitorExporterOptions;
+  /**
+   * OpenTelemetry Instrumentations configuration included as part of Azure Monitor (azureSdk, http, mongoDb, mySql, postgreSql, redis, redis4)
+   */
+  public instrumentationOptions?: InstrumentationOptions;
+  /** Enable Live Metrics feature */
+  public enableLiveMetrics?: boolean;
+  /** Enable Standard Metrics feature */
+  public enableStandardMetrics?: boolean;
+  /** Enable log sampling based on trace (Default true) */
+  public enableTraceBasedSamplingForLogs?: boolean;
+  /** Enable Performance Counter feature */
+  public enablePerformanceCounters?: boolean;
+
+  public browserSdkLoaderOptions?: BrowserSdkLoaderOptions;
+
+  private static _instance: JsonConfig;
+
+  private _tempDir: string;
+
+  /** Get Singleton instance */
+  public static getInstance(): JsonConfig {
+    if (!JsonConfig._instance) {
+      JsonConfig._instance = new JsonConfig();
+    }
+    return JsonConfig._instance;
+  }
+
+  /**
+   * Initializes a new instance of the JsonConfig class.
+   */
+  constructor() {
+    let jsonString = "";
+    this._tempDir = "";
+    const contentJsonConfig = process.env[ENV_CONTENT];
+    // JSON string added directly in env variable
+    if (contentJsonConfig) {
+      jsonString = contentJsonConfig;
+    }
+    // JSON file
+    else {
+      const configFileName = "applicationinsights.json";
+      const rootPath = findPackageRoot(dirName());
+      this._tempDir = path.join(rootPath, configFileName); // default
+      const configFile = process.env[ENV_CONFIGURATION_FILE];
+      if (configFile) {
+        if (path.isAbsolute(configFile)) {
+          this._tempDir = configFile;
+        } else {
+          this._tempDir = path.join(rootPath, configFile); // Relative path to applicationinsights folder
+        }
+      }
+      try {
+        jsonString = fs.readFileSync(this._tempDir, "utf8");
+      } catch (err) {
+        Logger.getInstance().info("Failed to read JSON config file: ", err);
+      }
+    }
+    try {
+      const jsonConfig: AzureMonitorOpenTelemetryOptions = JSON.parse(jsonString);
+      this.azureMonitorExporterOptions = jsonConfig.azureMonitorExporterOptions;
+      this.samplingRatio = jsonConfig.samplingRatio;
+      this.tracesPerSecond = jsonConfig.tracesPerSecond;
+      this.instrumentationOptions = jsonConfig.instrumentationOptions;
+      this.browserSdkLoaderOptions = jsonConfig.browserSdkLoaderOptions;
+      this.enableLiveMetrics = jsonConfig.enableLiveMetrics;
+      this.enableStandardMetrics = jsonConfig.enableStandardMetrics;
+      this.enableTraceBasedSamplingForLogs = jsonConfig.enableTraceBasedSamplingForLogs;
+    } catch (err) {
+      Logger.getInstance().info("Missing or invalid JSON config file: ", err);
+    }
+  }
+}
