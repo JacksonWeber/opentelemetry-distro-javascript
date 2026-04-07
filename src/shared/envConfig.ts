@@ -8,6 +8,7 @@ import {
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
 } from "@opentelemetry/sdk-trace-base";
+import type { MicrosoftOpenTelemetryOptions } from "../distro/types.js";
 import { Logger } from "./logging/index.js";
 const TRACES_SAMPLER = "OTEL_TRACES_SAMPLER";
 const TRACES_SAMPLER_ARG = "OTEL_TRACES_SAMPLER_ARG";
@@ -34,7 +35,7 @@ const SUPPORTED_OTEL_SAMPLERS = [
  * Azure Monitor OpenTelemetry Client Configuration through Env variables
  * @internal
  */
-export class EnvConfig {
+export class EnvConfig implements MicrosoftOpenTelemetryOptions {
   /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
   public samplingRatio?: number;
   /** The maximum number of spans to sample per second. (Default undefined)*/
