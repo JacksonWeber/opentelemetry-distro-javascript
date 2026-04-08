@@ -55,9 +55,6 @@ export interface A365Options {
   /** Baggage propagation and span enrichment options. */
   baggage?: A365BaggageOptions;
 
-  /** GenAI and agent framework instrumentation toggles. */
-  instrumentations?: A365InstrumentationOptions;
-
   /** Hosting middleware options (requires @microsoft/agents-hosting). */
   hosting?: A365HostingOptions;
 }
@@ -68,54 +65,6 @@ export interface A365BaggageOptions {
   propagationEnabled?: boolean;
   /** Copy baggage items to span attributes. */
   enrichSpans?: boolean;
-}
-
-/** A365 instrumentation toggles for GenAI and agent frameworks. */
-export interface A365InstrumentationOptions {
-  /**
-   * Enable OpenAI Agents SDK instrumentation.
-   * Pass `true` for defaults or a configuration object.
-   * Requires `@openai/agents` as an optional peer dependency.
-   */
-  openaiAgents?: boolean | OpenAIAgentsInstrumentationConfig;
-
-  /**
-   * Enable LangChain instrumentation.
-   * Pass `true` for defaults or a configuration object.
-   * Requires `@langchain/core` as an optional peer dependency.
-   */
-  langchain?: boolean | LangChainInstrumentationConfig;
-
-  /**
-   * Enable Microsoft Agent Framework instrumentation.
-   * Requires `@microsoft/agents-hosting` as an optional peer dependency.
-   */
-  microsoftAgentFramework?: boolean;
-}
-
-/** Configuration for OpenAI Agents SDK instrumentation. */
-export interface OpenAIAgentsInstrumentationConfig {
-  /** Custom tracer name. */
-  tracerName?: string;
-  /** Custom tracer version. */
-  tracerVersion?: string;
-  /**
-   * When true, the gen_ai.input.messages attribute will be suppressed
-   * on InvokeAgent scope spans.
-   * @default false
-   */
-  suppressInvokeAgentInput?: boolean;
-  /**
-   * Enable recording of message content (input/output messages, tool args, etc.) in spans.
-   * @default false
-   */
-  isContentRecordingEnabled?: boolean;
-}
-
-/** Configuration for LangChain instrumentation. */
-export interface LangChainInstrumentationConfig {
-  /** Enable recording of message content in spans. */
-  isContentRecordingEnabled?: boolean;
 }
 
 /** Hosting middleware options. */

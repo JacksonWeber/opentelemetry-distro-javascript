@@ -36,13 +36,6 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.baggage.enrichSpans, true);
     });
 
-    it("should have correct default instrumentation options", () => {
-      const config = new A365Configuration();
-      assert.strictEqual(config.instrumentations.openaiAgents, false);
-      assert.strictEqual(config.instrumentations.langchain, false);
-      assert.strictEqual(config.instrumentations.microsoftAgentFramework, false);
-    });
-
     it("should have correct default hosting options", () => {
       const config = new A365Configuration();
       assert.strictEqual(config.hosting.enabled, false);
@@ -88,21 +81,6 @@ describe("A365Configuration", () => {
       });
       assert.strictEqual(config.baggage.propagationEnabled, false);
       assert.strictEqual(config.baggage.enrichSpans, false);
-    });
-
-    it("should apply instrumentation options", () => {
-      const config = new A365Configuration({
-        instrumentations: {
-          openaiAgents: true,
-          langchain: { isContentRecordingEnabled: true },
-          microsoftAgentFramework: true,
-        },
-      });
-      assert.strictEqual(config.instrumentations.openaiAgents, true);
-      assert.deepStrictEqual(config.instrumentations.langchain, {
-        isContentRecordingEnabled: true,
-      });
-      assert.strictEqual(config.instrumentations.microsoftAgentFramework, true);
     });
 
     it("should apply hosting options", () => {

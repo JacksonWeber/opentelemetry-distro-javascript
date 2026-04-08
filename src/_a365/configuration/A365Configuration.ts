@@ -5,7 +5,6 @@ import type {
   A365Options,
   ClusterCategory,
   A365BaggageOptions,
-  A365InstrumentationOptions,
   A365HostingOptions,
 } from "./A365ConfigurationOptions.js";
 import { getEnv } from "../utils/utils.js";
@@ -59,9 +58,6 @@ export class A365Configuration {
 
   /** Baggage options. */
   public readonly baggage: Required<A365BaggageOptions>;
-
-  /** Instrumentation toggles. */
-  public readonly instrumentations: A365InstrumentationOptions;
 
   /** Hosting options. */
   public readonly hosting: Required<A365HostingOptions>;
@@ -122,12 +118,6 @@ export class A365Configuration {
       enrichSpans: options?.baggage?.enrichSpans ?? true,
     };
 
-    this.instrumentations = {
-      openaiAgents: options?.instrumentations?.openaiAgents ?? false,
-      langchain: options?.instrumentations?.langchain ?? false,
-      microsoftAgentFramework: options?.instrumentations?.microsoftAgentFramework ?? false,
-    };
-
     this.hosting = {
       enabled: options?.hosting?.enabled ?? false,
     };
@@ -145,7 +135,6 @@ export class A365Configuration {
       options.tokenResolver !== undefined ||
       options.domainOverride !== undefined ||
       options.perRequestExport !== undefined ||
-      options.instrumentations !== undefined ||
       options.hosting?.enabled === true;
 
     if (hasNonTrivialOptions) {

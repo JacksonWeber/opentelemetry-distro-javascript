@@ -6,8 +6,5 @@ export type {
   A365Options,
   ClusterCategory,
   A365BaggageOptions,
-  A365InstrumentationOptions,
   A365HostingOptions,
-  OpenAIAgentsInstrumentationConfig,
-  LangChainInstrumentationConfig,
 } from "./A365ConfigurationOptions.js";
