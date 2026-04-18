@@ -3,7 +3,7 @@
 
 import { diag } from "@opentelemetry/api";
 import type { ConnectionString, ConnectionStringKey } from "./types.js";
-import { DEFAULT_BREEZE_ENDPOINT, DEFAULT_LIVEMETRICS_ENDPOINT } from "../types.js";
+import { DEFAULT_BREEZE_ENDPOINT, DEFAULT_LIVEMETRICS_ENDPOINT } from "../../types.js";
 
 /**
  * ConnectionString parser.

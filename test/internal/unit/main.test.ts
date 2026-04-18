@@ -18,10 +18,10 @@ import {
   StatsbeatInstrumentation,
   StatsbeatInstrumentationMap,
 } from "../../../src/types.js";
-import { getOsPrefix } from "../../../src/utils/common.js";
+import { getOsPrefix } from "../../../src/azureMonitor/utils/common.js";
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
-import { getInstance } from "../../../src/utils/statsbeat.js";
+import { getInstance } from "../../../src/azureMonitor/utils/statsbeat.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
 

@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import type http from "node:http";
 import type { ResourceDetector } from "@opentelemetry/resources";
 import {
   envDetector,
@@ -17,107 +16,9 @@ import {
   azureVmDetector,
 } from "@opentelemetry/resource-detector-azure";
 
-export function ignoreOutgoingRequestHook(request: http.RequestOptions): boolean {
-  if (request && request.headers && !Array.isArray(request.headers)) {
-    const outgoingHeaders = request.headers as http.OutgoingHttpHeaders;
-    if (
-      (outgoingHeaders["User-Agent"] &&
-        outgoingHeaders["User-Agent"]
-          .toString()
-          .indexOf("azsdk-js-monitor-opentelemetry-exporter") > -1) ||
-      (outgoingHeaders["user-agent"] &&
-        outgoingHeaders["user-agent"]
-          .toString()
-          .indexOf("azsdk-js-monitor-opentelemetry-exporter") > -1)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export const isWindows = (): boolean => {
-  return process.platform === "win32";
-};
-
-export const isLinux = (): boolean => {
-  return process.platform === "linux";
-};
-
-export const isDarwin = (): boolean => {
-  return process.platform === "darwin";
-};
-
-/**
- * Get prefix for OS
- * Windows system: "w"
- * Linux system: "l"
- * non-Windows and non-Linux system: "u" (unknown)
- */
-export const getOsPrefix = (): string => {
-  return isWindows() ? "w" : isLinux() ? "l" : "u";
-};
-
-/**
- * Get prefix resource provider, vm will considered as "unknown RP"
- * Web App: "a"
- * Function App: "f"
- * non-Web and non-Function APP: "u" (unknown)
- */
-export const isAppService = (): boolean => {
-  return process.env.WEBSITE_SITE_NAME && !process.env.FUNCTIONS_WORKER_RUNTIME ? true : false;
-};
-
 export const isFunctionApp = (): boolean => {
   return process.env.FUNCTIONS_WORKER_RUNTIME ? true : false;
 };
-
-export const isAks = (): boolean => {
-  return process.env.AKS_ARM_NAMESPACE_ID || process.env.KUBERNETES_SERVICE_HOST ? true : false;
-};
-
-/**
- * Get prefix resource provider, vm will considered as "unknown RP"
- * Web App: "a"
- * Function App: "f"
- * AKS: "k"
- * non-Web and non-Function APP: "u" (unknown)
- */
-export const getResourceProvider = (): string => {
-  if (isAppService()) {
-    return "a";
-  }
-  if (isFunctionApp()) {
-    return "f";
-  }
-  if (isAks()) {
-    return "k";
-  }
-  return "u";
-};
-
-/**
- * Convert milliseconds to Breeze expected time.
- * @internal
- */
-export function msToTimeSpan(ms: number): string {
-  let totalms = ms;
-  if (Number.isNaN(totalms) || totalms < 0 || !Number.isFinite(ms)) {
-    totalms = 0;
-  }
-
-  let sec = ((totalms / 1000) % 60).toFixed(7).replace(/0{0,4}$/, "");
-  let min = `${Math.floor(totalms / (1000 * 60)) % 60}`;
-  let hour = `${Math.floor(totalms / (1000 * 60 * 60)) % 24}`;
-  const days = Math.floor(totalms / (1000 * 60 * 60 * 24));
-
-  sec = sec.indexOf(".") < 2 ? `0${sec}` : sec;
-  min = min.length < 2 ? `0${min}` : min;
-  hour = hour.length < 2 ? `0${hour}` : hour;
-  const daysText = days > 0 ? `${days}.` : "";
-
-  return `${daysText + hour}:${min}:${sec}`;
-}
 
 // This function is a slight modification of an upstream otel util function -
 // mainly for prioritizing the resource detectors customer may specify over

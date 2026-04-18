@@ -10,7 +10,7 @@ import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { AzureLogRecordProcessor } from "./logRecordProcessor.js";
 import { AzureBatchLogRecordProcessor } from "./batchLogRecordProcessor.js";
-import { logLevelToSeverityNumber } from "../../utils/logUtils.js";
+import { logLevelToSeverityNumber } from "../utils/logUtils.js";
 
 /**
  * Azure Monitor OpenTelemetry Log Handler

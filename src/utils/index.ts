@@ -16,4 +16,4 @@ export {
   writeFileAsync,
   unlinkAsync,
 } from "./fileSystem.js";
-export { ignoreOutgoingRequestHook } from "./common.js";
+export { isFunctionApp, parseResourceDetectorsFromEnvVar } from "./common.js";

@@ -39,7 +39,7 @@ import {
 } from "./utils.js";
 import { QuickpulseMetricExporter } from "./export/exporter.js";
 import { QuickpulseSender } from "./export/sender.js";
-import { ConnectionStringParser } from "../../../utils/connectionStringParser.js";
+import { ConnectionStringParser } from "../../utils/connectionStringParser.js";
 import { DEFAULT_LIVEMETRICS_ENDPOINT } from "../../../types.js";
 import type {
   QuickpulseExporterOptions,
@@ -51,7 +51,7 @@ import type {
 } from "./types.js";
 import { QuickPulseOpenTelemetryMetricNames } from "./types.js";
 import { hrTimeToMilliseconds, suppressTracing } from "@opentelemetry/core";
-import { getInstance } from "../../../utils/statsbeat.js";
+import { getInstance } from "../../utils/statsbeat.js";
 import type { CollectionConfigurationError } from "../../generated/index.js";
 import { Filter } from "./filtering/filter.js";
 import { Validator } from "./filtering/validator.js";

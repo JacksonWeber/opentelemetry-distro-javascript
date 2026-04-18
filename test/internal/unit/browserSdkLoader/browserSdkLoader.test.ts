@@ -6,7 +6,7 @@ import { BrowserSdkLoader } from "../../../../src/azureMonitor/browserSdkLoader/
 import * as BrowserSdkLoaderHelper from "../../../../src/azureMonitor/browserSdkLoader/browserSdkLoaderHelper.js";
 import type { MicrosoftOpenTelemetryOptions } from "../../../../src/index.js";
 import { shutdownAzureMonitor, useAzureMonitor } from "../../../../src/index.js";
-import { getOsPrefix } from "../../../../src/utils/common.js";
+import { getOsPrefix } from "../../../../src/azureMonitor/utils/common.js";
 import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { assert, vi, describe, beforeEach, afterEach, afterAll, it, expect } from "vitest";
