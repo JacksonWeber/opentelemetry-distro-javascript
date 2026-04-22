@@ -57,6 +57,8 @@ export interface MicrosoftOpenTelemetryOptions {
  * distro level in {@link MicrosoftOpenTelemetryOptions}.
  */
 export interface AzureMonitorOpenTelemetryOptions {
+  /** Enable or disable Azure Monitor export (Default true) */
+  enabled?: boolean;
   /** Azure Monitor Exporter Configuration */
   azureMonitorExporterOptions?: AzureMonitorExporterOptions;
   /** Enable Live Metrics feature (Default false) */
