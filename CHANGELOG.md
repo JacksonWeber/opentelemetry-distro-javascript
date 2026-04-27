@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#50](https://github.com/microsoft/opentelemetry-distro-javascript/issues/50))
+
 ## [0.1.0-alpha.6] - 2026-04-24
 
 ### Breaking Changes
