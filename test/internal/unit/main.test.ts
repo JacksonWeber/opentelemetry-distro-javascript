@@ -1180,19 +1180,12 @@ describe("Main functions", () => {
         openaiAgents: { enabled: false },
         langchain: {
           enabled: true,
-          isContentRecordingEnabled: true,
         },
       },
     });
 
     await vi.waitFor(() => {
-      expect(instrumentSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({
-          enabled: true,
-          isContentRecordingEnabled: true,
-        }),
-      );
+      expect(instrumentSpy).toHaveBeenCalledWith(expect.any(Object));
     });
 
     await shutdownMicrosoftOpenTelemetry();

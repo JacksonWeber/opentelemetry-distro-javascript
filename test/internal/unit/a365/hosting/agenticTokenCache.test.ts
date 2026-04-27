@@ -325,14 +325,14 @@ describe("AgenticTokenCache", () => {
     });
   });
 
-  it("uses default scope (powerplatform) when no options provided", async () => {
+  it("uses default scope when no options provided", async () => {
     const jwt = makeJwtWithExp(Math.floor(Date.now() / 1000) + 3600);
     const auth = makeAuthMock(jwt);
 
     await cache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
 
     expect(auth.exchangeToken).toHaveBeenCalledWith(expect.anything(), "agentic", {
-      scopes: ["https://api.powerplatform.com/.default"],
+      scopes: ["api://9b975845-388f-4429-889e-eab1ef63949c/.default"],
     });
   });
 
