@@ -87,6 +87,8 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
+For A365 scenarios, scope APIs, baggage, hosting middleware, and official terminology alignment, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
+
 ### Azure Monitor
 
 ```typescript
