@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Other Changes
+- Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
+
 ## [0.1.0-beta.1] - 2026-04-27
 
 First beta release. Promotes all functionality from the 0.1.0-alpha series.
