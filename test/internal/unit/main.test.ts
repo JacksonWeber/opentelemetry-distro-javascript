@@ -84,9 +84,8 @@ describe("Main functions", () => {
   });
 
   it("sets MICROSOFT_OPENTELEMETRY_VERSION env var on import so the Azure Monitor exporter reports the 'mot' sdkVersion prefix", async () => {
-    const { MICROSOFT_OPENTELEMETRY_VERSION, AZURE_MONITOR_OPENTELEMETRY_VERSION } = await import(
-      "../../../src/types.js"
-    );
+    const { MICROSOFT_OPENTELEMETRY_VERSION, AZURE_MONITOR_OPENTELEMETRY_VERSION } =
+      await import("../../../src/types.js");
     assert.strictEqual(
       process.env["MICROSOFT_OPENTELEMETRY_VERSION"],
       MICROSOFT_OPENTELEMETRY_VERSION,
