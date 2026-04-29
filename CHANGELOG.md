@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+- A365: `a365.enabled: true` now registers only the `A365SpanProcessor`. Set `a365.enableObservabilityExporter: true` (or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`) to also add the A365 HTTP exporter. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
+- A365: `ENABLE_A365_OBSERVABILITY_EXPORTER` env var now toggles only the HTTP exporter, not the master `a365.enabled` flag.
+
+### Features Added
+- Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values win over env vars. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
+
 ## [0.1.0-beta.1] - 2026-04-27
 
 First beta release. Promotes all functionality from the 0.1.0-alpha series.
