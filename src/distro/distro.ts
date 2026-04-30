@@ -30,6 +30,7 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import { configureA365Logger } from "../a365/logging.js";
 import type {
   MicrosoftOpenTelemetryOptions,
   InstrumentationOptions,
@@ -137,6 +138,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   patchOpenTelemetryInstrumentationEnable();
   const a365Config = new A365Configuration(options?.a365);
 
+  // Apply the resolved A365 log level (programmatic option > env var) so the
+  // A365 logger filter reflects user-supplied configuration instead of being
+  // pinned to whatever the env var was at module-load time.
+  if (a365Config.logLevel !== undefined) {
+    configureA365Logger({ logLevel: a365Config.logLevel });
+  }
+
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
   // Connection-string validation is delegated to the Azure Monitor module.
@@ -230,34 +238,38 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   //    is provided) ───────────────────────────────────────────────────────────
   if (a365Config.enabled) {
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) and
-    // telemetry.sdk.* attributes to span attributes.
+    // telemetry.sdk.* attributes to span attributes. Always registered when
+    // A365 is enabled, even if the HTTP exporter is suppressed, so downstream
+    // exporters (Azure Monitor, OTLP, …) still receive the enriched spans.
     spanProcessors.push(new A365SpanProcessor());
-    const a365Exporter = new Agent365Exporter({
-      clusterCategory: a365Config.clusterCategory,
-      domainOverride: a365Config.domainOverride,
-      authScopes: a365Config.authScopes,
-      tokenResolver: a365Config.tokenResolver,
-      useS2SEndpoint: a365Config.useS2SEndpoint,
-      ...(a365Config.maxQueueSize !== undefined && {
-        maxQueueSize: a365Config.maxQueueSize,
-      }),
-      ...(a365Config.scheduledDelayMilliseconds !== undefined && {
-        scheduledDelayMilliseconds: a365Config.scheduledDelayMilliseconds,
-      }),
-      ...(a365Config.exporterTimeoutMilliseconds !== undefined && {
-        exporterTimeoutMilliseconds: a365Config.exporterTimeoutMilliseconds,
-      }),
-      ...(a365Config.httpRequestTimeoutMilliseconds !== undefined && {
-        httpRequestTimeoutMilliseconds: a365Config.httpRequestTimeoutMilliseconds,
-      }),
-      ...(a365Config.maxExportBatchSize !== undefined && {
-        maxExportBatchSize: a365Config.maxExportBatchSize,
-      }),
-      ...(a365Config.maxPayloadBytes !== undefined && {
-        maxPayloadBytes: a365Config.maxPayloadBytes,
-      }),
-    });
-    spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    if (a365Config.enableObservabilityExporter) {
+      const a365Exporter = new Agent365Exporter({
+        clusterCategory: a365Config.clusterCategory,
+        domainOverride: a365Config.domainOverride,
+        authScopes: a365Config.authScopes,
+        tokenResolver: a365Config.tokenResolver,
+        useS2SEndpoint: a365Config.useS2SEndpoint,
+        ...(a365Config.maxQueueSize !== undefined && {
+          maxQueueSize: a365Config.maxQueueSize,
+        }),
+        ...(a365Config.scheduledDelayMilliseconds !== undefined && {
+          scheduledDelayMilliseconds: a365Config.scheduledDelayMilliseconds,
+        }),
+        ...(a365Config.exporterTimeoutMilliseconds !== undefined && {
+          exporterTimeoutMilliseconds: a365Config.exporterTimeoutMilliseconds,
+        }),
+        ...(a365Config.httpRequestTimeoutMilliseconds !== undefined && {
+          httpRequestTimeoutMilliseconds: a365Config.httpRequestTimeoutMilliseconds,
+        }),
+        ...(a365Config.maxExportBatchSize !== undefined && {
+          maxExportBatchSize: a365Config.maxExportBatchSize,
+        }),
+        ...(a365Config.maxPayloadBytes !== undefined && {
+          maxPayloadBytes: a365Config.maxPayloadBytes,
+        }),
+      });
+      spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    }
   }
 
   // Merge views: use Azure Monitor views when available (they cover the same
@@ -273,7 +285,10 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     (options?.logRecordProcessors?.length ?? 0) > 0;
   const consoleEnabled =
     options?.enableConsoleExporters ??
-    (!azureMonitorEnabled && !isOtlpEnabled() && !a365Config.enabled && !hasCustomProcessors);
+    (!azureMonitorEnabled &&
+      !isOtlpEnabled() &&
+      !(a365Config.enabled && a365Config.enableObservabilityExporter) &&
+      !hasCustomProcessors);
   if (consoleEnabled) {
     spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
     metricReaders.push(
