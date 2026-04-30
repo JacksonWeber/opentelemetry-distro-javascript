@@ -48,4 +48,25 @@ export interface A365Options {
 
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
+
+  /** When true, use the S2S endpoint path for export. @default false */
+  useS2SEndpoint?: boolean;
+
+  /** Maximum span queue size before drops occur. */
+  maxQueueSize?: number;
+
+  /** Delay (ms) between automatic batch flush attempts. */
+  scheduledDelayMilliseconds?: number;
+
+  /** Maximum time (ms) for the entire export() call. */
+  exporterTimeoutMilliseconds?: number;
+
+  /** Timeout (ms) per individual HTTP request. Each retry gets a fresh timeout. */
+  httpRequestTimeoutMilliseconds?: number;
+
+  /** Maximum number of spans per export batch. */
+  maxExportBatchSize?: number;
+
+  /** Maximum estimated payload size (bytes) per HTTP chunk. */
+  maxPayloadBytes?: number;
 }
