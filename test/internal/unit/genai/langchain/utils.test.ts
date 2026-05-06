@@ -500,6 +500,24 @@ describe("setModelAttribute", () => {
     );
   });
 
+  it("setModelAttribute is a no-op for the request model when only an Azure deployment-alias field is present (alias is surfaced separately by the bridge helper)", () => {
+    // When LangChain populates only an Azure deployment-alias field, the
+    // instrumentation must NOT set gen_ai.request.model — the downstream
+    // processor is responsible for taking the alias from the bridge attribute
+    // and assigning it. This guards against the instrumentation accidentally
+    // re-introducing Azure decisioning.
+    const span = makeSpan();
+    const run = makeRun({
+      extra: { invocation_params: { azureOpenAIApiDeploymentName: "my-gpt4o-deployment" } },
+    });
+    setModelAttribute(run, span);
+    assert.strictEqual(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length,
+      0,
+      "setModelAttribute writes nothing when the only model-like value is an Azure deployment alias",
+    );
+  });
+
   it("does nothing when no model is found", () => {
     const span = makeSpan();
     const run = makeRun();
@@ -580,6 +598,19 @@ describe("getLangChainDeploymentAlias / setLangChainDeploymentAliasAttribute", (
       ),
       "alias-3",
     );
+  });
+
+  it("getLangChainDeploymentAlias skips empty-string fields and falls through to the next candidate", () => {
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          azureOpenAIApiDeploymentName: "",
+          azure_deployment: "   ",
+          deployment_name: "alias-3",
+        },
+      },
+    });
+    assert.strictEqual(getLangChainDeploymentAlias(run), "alias-3");
   });
 
   it("getLangChainDeploymentAlias returns undefined when no alias fields are present", () => {
