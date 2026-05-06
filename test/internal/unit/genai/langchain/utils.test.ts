@@ -419,15 +419,12 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo",
-      ),
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
       "request model is the LangChain-generic identifier, not the Azure deployment alias",
     );
     assert.ok(
       !calls.some(
-        (c: unknown[]) =>
-          c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
       ),
       "Azure deployment alias must not be set as gen_ai.request.model by the instrumentation",
     );
