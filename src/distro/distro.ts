@@ -367,7 +367,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     spanProcessors: [
       ...(traceHandler ? [traceHandler.getAzureMonitorSpanProcessor()] : []),
       ...spanProcessors,
-      ...(traceHandler ? [traceHandler.getLangChainModelProcessor()] : []),
+      ...(traceHandler ? [traceHandler.getDeploymentAliasProcessor()] : []),
       ...(traceHandler ? [traceHandler.getBatchSpanProcessor()] : []),
     ],
     resourceDetectors: resourceDetectorsList,

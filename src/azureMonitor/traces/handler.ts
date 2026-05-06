@@ -20,7 +20,8 @@ import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { ignoreOutgoingRequestHook } from "../utils/common.js";
 import { AzureMonitorSpanProcessor } from "./spanProcessor.js";
-import { AzureMonitorLangChainModelProcessor } from "./azureMonitorLangChainModelProcessor.js";
+import { AzureMonitorDeploymentAliasProcessor } from "./azureMonitorDeploymentAliasProcessor.js";
+import { registerAzureLangChainDeploymentAliasEnricher } from "./azureLangChainDeploymentAliasEnricher.js";
 import type { Instrumentation } from "@opentelemetry/instrumentation";
 
 /**
@@ -29,7 +30,8 @@ import type { Instrumentation } from "@opentelemetry/instrumentation";
 export class TraceHandler {
   private _batchSpanProcessor: BatchSpanProcessor;
   private _azureSpanProcessor: AzureMonitorSpanProcessor;
-  private _langChainModelProcessor: AzureMonitorLangChainModelProcessor;
+  private _deploymentAliasProcessor: AzureMonitorDeploymentAliasProcessor;
+  private _unregisterLangChainEnricher: (() => void) | undefined;
   private _azureExporter: AzureMonitorTraceExporter;
   private _instrumentations: Instrumentation[];
   private _config: InternalConfig;
@@ -53,7 +55,10 @@ export class TraceHandler {
     };
     this._batchSpanProcessor = new BatchSpanProcessor(this._azureExporter, bufferConfig);
     this._azureSpanProcessor = new AzureMonitorSpanProcessor(this._metricHandler);
-    this._langChainModelProcessor = new AzureMonitorLangChainModelProcessor();
+    this._deploymentAliasProcessor = new AzureMonitorDeploymentAliasProcessor();
+    // Best-effort: failures here are logged and swallowed inside the helper
+    // so an unloadable GenAI integration cannot break the trace pipeline.
+    this._unregisterLangChainEnricher = registerAzureLangChainDeploymentAliasEnricher();
     this._initializeInstrumentations();
   }
 
@@ -65,8 +70,8 @@ export class TraceHandler {
     return this._azureSpanProcessor;
   }
 
-  public getLangChainModelProcessor(): AzureMonitorLangChainModelProcessor {
-    return this._langChainModelProcessor;
+  public getDeploymentAliasProcessor(): AzureMonitorDeploymentAliasProcessor {
+    return this._deploymentAliasProcessor;
   }
 
   public getInstrumentations(): Instrumentation[] {
@@ -79,7 +84,11 @@ export class TraceHandler {
   public async shutdown(): Promise<void> {
     await this._batchSpanProcessor.shutdown();
     await this._azureSpanProcessor.shutdown();
-    await this._langChainModelProcessor.shutdown();
+    await this._deploymentAliasProcessor.shutdown();
+    if (this._unregisterLangChainEnricher) {
+      this._unregisterLangChainEnricher();
+      this._unregisterLangChainEnricher = undefined;
+    }
     await this._azureExporter.shutdown();
   }
 

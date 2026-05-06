@@ -276,6 +276,69 @@ describe("LangChainTracer", () => {
       // Should not end any additional spans
       assert.strictEqual(tracer.spans.length, spanCount);
     });
+
+    it("invokes registered span enrichers with the run and span", async () => {
+      const { registerSpanEnricher } =
+        await import("../../../../../src/genai/spanEnricherRegistry.js");
+      const calls: Array<{ run: Run; span: unknown }> = [];
+      const unregister = registerSpanEnricher((r, s) => {
+        calls.push({ run: r as Run, span: s });
+      });
+
+      try {
+        const tracer = createMockTracer();
+        const lct = new LangChainTracer(tracer);
+        const run = makeRun();
+        await lct.onRunCreate(run);
+        const span = tracer.lastSpan!;
+        await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
+
+        const matching = calls.filter((c) => c.run === run);
+        assert.strictEqual(
+          matching.length,
+          1,
+          "registered enricher invoked exactly once for this run",
+        );
+        assert.strictEqual(matching[0].span, span);
+      } finally {
+        unregister();
+      }
+    });
+
+    it("isolates errors in one enricher: span still ends, later enrichers still run", async () => {
+      const { registerSpanEnricher } =
+        await import("../../../../../src/genai/spanEnricherRegistry.js");
+      const order: string[] = [];
+      const u1 = registerSpanEnricher(() => {
+        order.push("first");
+        throw new Error("first enricher boom");
+      });
+      const u2 = registerSpanEnricher(() => {
+        order.push("second");
+      });
+
+      try {
+        const tracer = createMockTracer();
+        const lct = new LangChainTracer(tracer);
+        const run = makeRun();
+        await lct.onRunCreate(run);
+        const span = tracer.lastSpan!;
+
+        // _endTrace must not throw even though an enricher does.
+        await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
+
+        assert.deepStrictEqual(order, ["first", "second"], "later enrichers still run");
+        assert.strictEqual(span.ended, true, "span still ends despite enricher failure");
+        assert.strictEqual(
+          span.statusObj?.code,
+          SpanStatusCode.OK,
+          "span status is not flipped to ERROR by an enricher failure",
+        );
+      } finally {
+        u1();
+        u2();
+      }
+    });
   });
 
   describe("parent-child span linking", () => {
