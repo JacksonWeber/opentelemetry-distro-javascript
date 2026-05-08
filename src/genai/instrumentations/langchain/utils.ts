@@ -506,6 +506,13 @@ export function setModelAttribute(run: Run, span: Span) {
 // typically surfaces this as the AIMessage id (top-level for v1, nested
 // under kwargs for v0) and some providers also include it under
 // response_metadata.id or on LLMResult.llmOutput.id.
+//
+// Only primitive string / number values are accepted: in some LangChain
+// serialization paths an `id` field can be an array of class hierarchy names
+// (e.g. `["langchain", "schema", "messages", "AIMessage"]`) which must not be
+// emitted as a response id. Provider-supplied sources (`response_metadata.id`
+// and `llmOutput.id`) are checked first because they are unambiguously the
+// transport-level response identifier.
 export function getResponseId(run: Run): string | undefined {
   const message = run.outputs?.generations?.[0]?.[0]?.message as
     | Record<string, unknown>
@@ -515,18 +522,25 @@ export function getResponseId(run: Run): string | undefined {
     (message?.response_metadata as Record<string, unknown> | undefined) ??
     (messageKwargs?.response_metadata as Record<string, unknown> | undefined);
   const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
-  return [
-    // v1: AIMessage.id directly on the message
-    message?.id,
-    // v0: AIMessage.id nested under kwargs
-    messageKwargs?.id,
+  const candidates: unknown[] = [
     // Provider-supplied response id surfaced via response_metadata
     responseMetadata?.id,
     // LLMResult.llmOutput.id (some providers)
     llmOutput?.id,
-  ]
-    .map((v) => (v != null ? String(v).trim() : ""))
-    .find((v) => v.length > 0);
+    // v1: AIMessage.id directly on the message
+    message?.id,
+    // v0: AIMessage.id nested under kwargs
+    messageKwargs?.id,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) return trimmed;
+    } else if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+  return undefined;
 }
 
 // Response identifier - Set the gen_ai.response.id attribute on the span when

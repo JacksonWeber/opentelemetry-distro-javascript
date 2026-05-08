@@ -495,6 +495,87 @@ describe("setResponseIdAttribute", () => {
     );
   });
 
+  it("extracts response id from response_metadata.id (v1, top-level)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { id: "chatcmpl-meta-v1" } } }]],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-meta-v1",
+      ),
+    );
+  });
+
+  it("extracts response id from response_metadata.id nested under kwargs (v0)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { kwargs: { response_metadata: { id: "chatcmpl-meta-v0" } } } }]],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-meta-v0",
+      ),
+    );
+  });
+
+  it("prefers response_metadata.id over message.id when both are present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                id: "ignored-message-id",
+                response_metadata: { id: "preferred-metadata-id" },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "preferred-metadata-id",
+      ),
+    );
+    assert.ok(
+      !calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "ignored-message-id",
+      ),
+    );
+  });
+
+  it("ignores non-primitive AIMessage.id values (e.g. serialization class arrays)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                // LangChain Serializable.id is sometimes an array of class
+                // hierarchy names; it must not be emitted as a response id.
+                id: ["langchain", "schema", "messages", "AIMessage"],
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
   it("does nothing when no response id is found", () => {
     const span = makeSpan();
     const run = makeRun();
