@@ -12,9 +12,10 @@ import {
   getChannelBaggagePairs,
   getConversationIdAndItemLinkPairs,
   resolveEmbodiedAgentIds,
+  resolveSubChannel,
   OpenTelemetryConstants,
 } from "../../../../../src/a365/index.js";
-import type { TurnContextLike } from "../../../../../src/a365/index.js";
+import type { TurnContextLike, ActivityLike } from "../../../../../src/a365/index.js";
 
 let contextManager: AsyncLocalStorageContextManager;
 
@@ -259,6 +260,42 @@ describe("TurnContextUtils", () => {
       const pairs = getChannelBaggagePairs(null as unknown as TurnContextLike);
       expect(pairs).toEqual([]);
     });
+
+    it("should extract subChannel from productContext when channelIdSubChannel is not set", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = { productContext: "from-product-context" };
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("from-product-context");
+    });
+
+    it("should prefer channelIdSubChannel over productContext", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = "direct-subchannel";
+      ctx.activity.channelData = { productContext: "from-product-context" };
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("direct-subchannel");
+    });
+
+    it("should extract subChannel from JSON string channelData", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = JSON.stringify({ productContext: "json-string-context" });
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("json-string-context");
+    });
+
+    it("should handle invalid JSON channelData gracefully", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = "not-valid-json{{{";
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBeUndefined();
+    });
   });
 
   describe("getConversationIdAndItemLinkPairs", () => {
@@ -275,6 +312,46 @@ describe("TurnContextUtils", () => {
     it("should return empty array when context is null", () => {
       const pairs = getConversationIdAndItemLinkPairs(null as unknown as TurnContextLike);
       expect(pairs).toEqual([]);
+    });
+  });
+
+  describe("resolveSubChannel", () => {
+    it("should return channelIdSubChannel when set", () => {
+      const activity: ActivityLike = { channelIdSubChannel: "general" };
+      expect(resolveSubChannel(activity)).toBe("general");
+    });
+
+    it("should fall back to productContext from object channelData", () => {
+      const activity: ActivityLike = {
+        channelData: { productContext: "from-product-context" },
+      };
+      expect(resolveSubChannel(activity)).toBe("from-product-context");
+    });
+
+    it("should fall back to productContext from JSON string channelData", () => {
+      const activity: ActivityLike = {
+        channelData: JSON.stringify({ productContext: "json-string-context" }),
+      };
+      expect(resolveSubChannel(activity)).toBe("json-string-context");
+    });
+
+    it("should return undefined for invalid JSON channelData", () => {
+      const activity: ActivityLike = {
+        channelData: "not-valid-json{{{",
+      };
+      expect(resolveSubChannel(activity)).toBeUndefined();
+    });
+
+    it("should prefer channelIdSubChannel over productContext", () => {
+      const activity: ActivityLike = {
+        channelIdSubChannel: "direct-subchannel",
+        channelData: { productContext: "from-product-context" },
+      };
+      expect(resolveSubChannel(activity)).toBe("direct-subchannel");
+    });
+
+    it("should return undefined when activity is undefined", () => {
+      expect(resolveSubChannel(undefined)).toBeUndefined();
     });
   });
 });

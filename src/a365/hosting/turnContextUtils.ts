@@ -8,7 +8,7 @@
  */
 
 import { OpenTelemetryConstants } from "../constants.js";
-import type { TurnContextLike } from "./types.js";
+import type { ActivityLike, TurnContextLike } from "./types.js";
 
 function normalizePairs(pairs: Array<[string, string | undefined]>): Array<[string, string]> {
   return pairs
@@ -88,18 +88,45 @@ export function getTenantIdPair(turnContext: TurnContextLike): Array<[string, st
 }
 
 /**
+ * Resolves the subchannel from an activity, falling back to channelData.productContext
+ * when channelIdSubChannel is not set directly.
+ */
+export function resolveSubChannel(activity: ActivityLike | undefined): string | undefined {
+  const rawSubChannel = activity?.channelIdSubChannel;
+  let subChannel =
+    typeof rawSubChannel === "string" && rawSubChannel.trim() !== "" ? rawSubChannel : undefined;
+  if (!subChannel) {
+    try {
+      const rawChannelData = activity?.channelData;
+      let channelData: Record<string, unknown> | undefined;
+      if (typeof rawChannelData === "string") {
+        channelData = JSON.parse(rawChannelData) as Record<string, unknown>;
+      } else if (rawChannelData && typeof rawChannelData === "object") {
+        channelData = rawChannelData as Record<string, unknown>;
+      }
+      if (channelData && typeof channelData.productContext === "string") {
+        subChannel = channelData.productContext as string;
+      }
+    } catch {
+      // Ignore parse errors – subChannel stays undefined
+    }
+  }
+  return subChannel;
+}
+
+/**
  * Extracts channel baggage pairs from the TurnContext.
  */
 export function getChannelBaggagePairs(turnContext: TurnContextLike): Array<[string, string]> {
   if (!turnContext) {
     return [];
   }
+
+  const subChannel = resolveSubChannel(turnContext.activity);
+
   const pairs: Array<[string, string | undefined]> = [
     [OpenTelemetryConstants.CHANNEL_NAME_KEY, turnContext.activity?.channelId],
-    [
-      OpenTelemetryConstants.CHANNEL_LINK_KEY,
-      turnContext.activity?.channelIdSubChannel as string | undefined,
-    ],
+    [OpenTelemetryConstants.CHANNEL_LINK_KEY, subChannel],
   ];
   return normalizePairs(pairs);
 }
