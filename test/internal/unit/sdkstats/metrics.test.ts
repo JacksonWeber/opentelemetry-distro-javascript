@@ -269,7 +269,7 @@ describe("sdkstats/metrics", () => {
       for (const dp of [...success, ...failure, ...retry, ...throttle, ...exception, ...duration]) {
         expect(dp.attributes.rp).toBe("unknown");
         expect(dp.attributes.attach).toBe("Manual");
-        expect(dp.attributes.cikey).toBe("");
+        expect(dp.attributes.cikey).toBeUndefined();
         expect(dp.attributes.language).toBe("node");
       }
 

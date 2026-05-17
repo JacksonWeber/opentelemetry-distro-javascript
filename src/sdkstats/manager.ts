@@ -111,7 +111,10 @@ export class SdkStatsManager {
    *   `AZURE_MONITOR_STATSBEAT_FEATURES`).
    * @param options.cikey Customer iKey to report as the `cikey`
    *   customDimension on every observation. Required by the SDKStats
-   *   spec; pass an empty string only if no customer iKey is available.
+   *   spec. Omit (or pass undefined) when the customer is not exporting
+   *   to an Application Insights resource — the dimension is then
+   *   dropped from the observation entirely rather than emitted as an
+   *   empty string.
    *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var

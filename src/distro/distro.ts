@@ -392,17 +392,17 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   //   full set (feature + instrumentation + network) and ships them to
   //   the well-known statsbeat endpoint.
   //
-  // `cikey` is reported as a customDimension on every observation per
-  // the SDKStats spec. Parse it from the customer connection string if
-  // we have one; empty string otherwise.
+  // `cikey` is reported as a customDimension on every SDKStats
+  // observation per the spec, but ONLY when the customer is exporting
+  // to an Application Insights resource. For OTLP-only / Console-only
+  // customers we leave it undefined so the dimension is omitted
+  // entirely rather than tagged with an empty / meaningless value.
   const sdkStatsCikey = (() => {
     const cs =
       config.azureMonitorExporterOptions?.connectionString ??
-      process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] ??
-      "";
-    if (!cs) return "";
-    const parsed = ConnectionStringParser.parse(cs);
-    return parsed.instrumentationkey ?? "";
+      process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+    if (!cs) return undefined;
+    return ConnectionStringParser.parse(cs).instrumentationkey || undefined;
   })();
   void SdkStatsManager.getInstance().initialize({
     networkOnly: azureMonitorEnabled,

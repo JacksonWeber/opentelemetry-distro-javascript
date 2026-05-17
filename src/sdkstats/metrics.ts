@@ -110,7 +110,8 @@ export interface SdkStatsMetricsOptions {
   /**
    * Customer instrumentation key emitted as the `cikey` customDimension
    * on every SDKStats observation, per the Application Insights SDKStats
-   * spec. Pass an empty string when no customer iKey is available.
+   * spec. Omitted entirely when undefined or empty (e.g. for OTLP-only
+   * customers without an Application Insights connection string).
    */
   cikey?: string;
   /**
@@ -137,22 +138,24 @@ export class SdkStatsMetrics {
   private readonly commonAttributes: Record<string, string>;
 
   constructor(meterProvider: MeterProvider, options: SdkStatsMetricsOptions = {}) {
-    const { distroVersion, networkOnly = false, cikey = "" } = options;
+    const { distroVersion, networkOnly = false, cikey } = options;
     const meter = meterProvider.getMeter("microsoft.opentelemetry.sdkstats");
 
     // Per spec/sdkstats.md the required customDimensions on every
-    // SDKStats observation are: rp, attach, cikey, runtimeVersion, os,
+    // SDKStats observation are: rp, attach, runtimeVersion, os,
     // language, version (plus endpoint/host on network gauges and
-    // statusCode/exceptionType where applicable). Missing dimensions
-    // cause envelopes to be silently dropped on the backend.
+    // statusCode/exceptionType where applicable). `cikey` is only
+    // meaningful when the customer is exporting to an Application
+    // Insights resource; omit it entirely for OTLP-only / Console-only
+    // customers rather than emitting an empty string.
     this.commonAttributes = {
       rp: "unknown",
       attach: "Manual",
-      cikey,
       runtimeVersion: process.version,
       os: os.type(),
       language: STATSBEAT_LANGUAGE,
       version: distroVersion || MICROSOFT_OPENTELEMETRY_VERSION,
+      ...(cikey ? { cikey } : {}),
     };
 
     // Feature / instrumentation bitmask gauges are skipped when running
