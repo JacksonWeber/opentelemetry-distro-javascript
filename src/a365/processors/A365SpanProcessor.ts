@@ -18,6 +18,7 @@ import type {
   ReadableSpan,
 } from "@opentelemetry/sdk-trace-base";
 import { OpenTelemetryConstants } from "../constants.js";
+import { GEN_AI_OPERATION_NAMES } from "../exporter/utils.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
 
 /**
@@ -31,6 +32,9 @@ export class A365SpanProcessor implements BaseSpanProcessor {
   /**
    * Called when a span is started.
    * Copies relevant baggage entries to span attributes.
+   * Only GenAI spans are processed (those with a known `gen_ai.operation.name`
+   * span attribute: invoke_agent, execute_tool, chat, output_messages);
+   * all other spans pass through unmodified.
    */
   onStart(span: Span, parentContext?: Context): void {
     const ctx = parentContext;
@@ -56,6 +60,16 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
+    // Only process GenAI spans — those with a known gen_ai.operation.name
+    // span attribute (invoke_agent, execute_tool, chat, output_messages).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const operationNameAttr = (span as any).attributes?.[
+      OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY
+    ];
+    if (!GEN_AI_OPERATION_NAMES.has(operationNameAttr)) {
+      return;
+    }
+
     const baggageMap = new Map<string, string>();
     baggage.getAllEntries().forEach(([key, entry]) => {
       if (entry.value) {
@@ -64,15 +78,10 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     });
 
     // Determine if this is an invoke_agent operation
-    const operationName =
-      baggageMap.get(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY) ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (span as any).attributes?.[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY];
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const spanName = (span as any).name || "";
     const isInvokeAgent =
-      operationName === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME ||
+      operationNameAttr === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME ||
       spanName.startsWith(OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME);
 
     // Build target key set
