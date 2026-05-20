@@ -113,11 +113,6 @@ export class SdkStatsManager {
   /**
    * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
    *
-   * Two separate MeterProviders are created so that Feature /
-   * Feature.instrumentations gauges export on the long interval (24h)
-   * while network statsbeat gauges (`Request_Success_Count`) export on
-   * the short interval (15 min).
-   *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
    * or initialization failed.

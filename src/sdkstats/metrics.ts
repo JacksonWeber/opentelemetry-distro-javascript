@@ -19,7 +19,6 @@ import type { ObservableResult } from "@opentelemetry/api";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { getSdkStatsFeatureFlags, getSdkStatsInstrumentationFlags } from "./state.js";
 import {
-  NETWORK_METRIC_NAMES,
   REQUEST_SUCCESS_NAME,
   drain,
   type NetworkMetricName,
@@ -54,13 +53,6 @@ const NETWORK_GAUGE_SPECS: readonly NetworkGaugeSpec[] = [
     description: "Number of successful HTTP exports per endpoint",
   },
 ];
-
-// Sanity check at module load — keeps NETWORK_GAUGE_SPECS in sync with
-// NETWORK_METRIC_NAMES if either is edited.
-/* istanbul ignore next */
-if (NETWORK_GAUGE_SPECS.length !== NETWORK_METRIC_NAMES.length) {
-  throw new Error("NETWORK_GAUGE_SPECS is out of sync with NETWORK_METRIC_NAMES");
-}
 
 /**
  * Options for {@link SdkStatsMetrics}.
