@@ -30,23 +30,32 @@ import { isSdkStatsEnabled, setSdkStatsShutdown } from "./state.js";
 import { SdkStatsMetrics } from "./metrics.js";
 
 /**
- * Default short export interval (15 minutes) for the standalone SDKStats
- * pipeline. This matches the Application Insights statsbeat
- * short-interval cadence used by the network statsbeat counters and the
- * Python distro (`_get_stats_short_export_interval()` in
- * `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
+ * Default long export interval (24 hours) for Feature/Instrumentation
+ * SDKStats per the Application Insights SDKStats specification.
  *
- * The pipeline emits both Feature/Feature.instrumentations gauges
- * (when not in `networkOnly` mode) and the `Request_Success_Count`
- * network gauge; the network counter dominates cadence requirements,
- * so the single shared interval defaults to short rather than long.
+ * @internal
+ */
+const DEFAULT_LONG_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Override env var: long export interval in seconds, per the spec.
+ *
+ * @internal
+ */
+const SDKSTATS_LONG_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL";
+
+/**
+ * Default short export interval (15 minutes) for network statsbeat
+ * counters. Matches the Application Insights statsbeat short-interval
+ * cadence used by the Python distro (`_get_stats_short_export_interval()`
+ * in `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
  *
  * @internal
  */
 const DEFAULT_SHORT_EXPORT_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
- * Override env var: standalone SDKStats export interval in seconds.
+ * Override env var: short (network) export interval in seconds.
  * Matches the Python distro env var name.
  *
  * @internal
@@ -65,7 +74,7 @@ const SDKSTATS_SHORT_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_SHORT_EXPO
 const SDKSTATS_CONNECTION_STRING_ENV = "APPLICATIONINSIGHTS_STATS_CONNECTION_STRING";
 
 /**
- * Initial-export delay (15 seconds) before the first flush.
+ * Initial-export delay (15 seconds) before the first long-interval flush.
  *
  * The spec recommends this delay specifically for the Node.js SDK to
  * avoid short-running CLI-style applications generating excess SDKStats
@@ -84,7 +93,8 @@ const INITIAL_EXPORT_DELAY_MS = 15 * 1000;
 export class SdkStatsManager {
   private static _instance: SdkStatsManager | undefined;
 
-  private _meterProvider: MeterProvider | undefined;
+  private _longMeterProvider: MeterProvider | undefined;
+  private _shortMeterProvider: MeterProvider | undefined;
   private _metrics: SdkStatsMetrics | undefined;
   private _initialized = false;
   private _initialExportTimer: NodeJS.Timeout | undefined;
@@ -102,6 +112,11 @@ export class SdkStatsManager {
 
   /**
    * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
+   *
+   * Two separate MeterProviders are created so that Feature /
+   * Feature.instrumentations gauges export on the long interval (24h)
+   * while network statsbeat gauges (`Request_Success_Count`) export on
+   * the short interval (15 min).
    *
    * @param options.networkOnly When `true`, the {@link SdkStatsMetrics}
    *   instance only registers the network gauge(s) and skips the
@@ -161,21 +176,42 @@ export class SdkStatsManager {
       const connectionString =
         process.env[SDKSTATS_CONNECTION_STRING_ENV] ?? NON_EU_CONNECTION_STRING;
 
-      const exporter = new AzureMonitorStatsbeatExporter({
+      const emptyResource = resourceFromAttributes({});
+
+      // Long-interval pipeline (24h) — Feature / Feature.instrumentations.
+      // Skipped when `networkOnly` is true (AzMon exporter owns those).
+      if (!options.networkOnly) {
+        const longExporter = new AzureMonitorStatsbeatExporter({
+          connectionString,
+          disableOfflineStorage: true,
+        });
+        const longReader = new PeriodicExportingMetricReader({
+          exporter: longExporter,
+          exportIntervalMillis: resolveLongExportInterval(),
+        });
+        this._longMeterProvider = new MeterProvider({
+          readers: [longReader],
+          resource: emptyResource,
+        });
+      }
+
+      // Short-interval pipeline (15 min) — network statsbeat gauges.
+      const shortExporter = new AzureMonitorStatsbeatExporter({
         connectionString,
         disableOfflineStorage: true,
       });
-
-      const reader = new PeriodicExportingMetricReader({
-        exporter,
-        exportIntervalMillis: resolveExportInterval(),
+      const shortReader = new PeriodicExportingMetricReader({
+        exporter: shortExporter,
+        exportIntervalMillis: resolveShortExportInterval(),
+      });
+      this._shortMeterProvider = new MeterProvider({
+        readers: [shortReader],
+        resource: emptyResource,
       });
 
-      this._meterProvider = new MeterProvider({
-        readers: [reader],
-        resource: resourceFromAttributes({}),
-      });
-      this._metrics = new SdkStatsMetrics(this._meterProvider, {
+      this._metrics = new SdkStatsMetrics({
+        longMeterProvider: this._longMeterProvider,
+        shortMeterProvider: this._shortMeterProvider,
         networkOnly: options.networkOnly,
         cikey: options.cikey,
       });
@@ -188,7 +224,10 @@ export class SdkStatsManager {
       // excess startup traffic. `unref()` so the timer never blocks
       // process shutdown.
       this._initialExportTimer = setTimeout(() => {
-        this._meterProvider?.forceFlush().catch((err) => {
+        Promise.all([
+          this._longMeterProvider?.forceFlush(),
+          this._shortMeterProvider?.forceFlush(),
+        ]).catch((err) => {
           Logger.getInstance().debug("[SDKStats] Initial forceFlush failed.", err);
         });
       }, INITIAL_EXPORT_DELAY_MS);
@@ -215,7 +254,10 @@ export class SdkStatsManager {
       this._initialExportTimer = undefined;
     }
     try {
-      await this._meterProvider?.shutdown();
+      await Promise.all([
+        this._longMeterProvider?.shutdown(),
+        this._shortMeterProvider?.shutdown(),
+      ]);
     } catch (error) {
       Logger.getInstance().debug("[SDKStats] Error shutting down standalone pipeline.", error);
     } finally {
@@ -226,7 +268,8 @@ export class SdkStatsManager {
   }
 
   private _cleanup(): void {
-    this._meterProvider = undefined;
+    this._longMeterProvider = undefined;
+    this._shortMeterProvider = undefined;
     this._metrics = undefined;
     this._initialized = false;
     if (this._initialExportTimer) {
@@ -244,7 +287,17 @@ export class SdkStatsManager {
   }
 }
 
-function resolveExportInterval(): number {
+function resolveLongExportInterval(): number {
+  const raw = process.env[SDKSTATS_LONG_EXPORT_INTERVAL_ENV];
+  if (!raw) return DEFAULT_LONG_EXPORT_INTERVAL_MS;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return DEFAULT_LONG_EXPORT_INTERVAL_MS;
+  }
+  return Math.floor(seconds * 1000);
+}
+
+function resolveShortExportInterval(): number {
   const raw = process.env[SDKSTATS_SHORT_EXPORT_INTERVAL_ENV];
   if (!raw) return DEFAULT_SHORT_EXPORT_INTERVAL_MS;
   const seconds = Number(raw);

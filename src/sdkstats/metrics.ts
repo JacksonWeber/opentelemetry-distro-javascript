@@ -88,6 +88,19 @@ export interface SdkStatsMetricsOptions {
    * partition the time series.
    */
   networkOnly?: boolean;
+  /**
+   * MeterProvider for long-interval gauges (Feature /
+   * Feature.instrumentations). May be undefined when `networkOnly` is
+   * true. When provided, gauges are registered on a meter from this
+   * provider so they export at the long (24h) cadence.
+   */
+  longMeterProvider?: MeterProvider;
+  /**
+   * MeterProvider for short-interval gauges (network statsbeat like
+   * `Request_Success_Count`). Gauges are registered on a meter from
+   * this provider so they export at the short (15 min) cadence.
+   */
+  shortMeterProvider: MeterProvider;
 }
 
 /**
@@ -98,9 +111,37 @@ export interface SdkStatsMetricsOptions {
 export class SdkStatsMetrics {
   private readonly commonAttributes: Record<string, string>;
 
-  constructor(meterProvider: MeterProvider, options: SdkStatsMetricsOptions = {}) {
-    const { distroVersion, networkOnly = false, cikey } = options;
-    const meter = meterProvider.getMeter("microsoft.opentelemetry.sdkstats");
+  constructor(options: SdkStatsMetricsOptions);
+  /** @deprecated Use the options-object overload instead. */
+  constructor(
+    meterProvider: MeterProvider,
+    options?: Omit<SdkStatsMetricsOptions, "shortMeterProvider" | "longMeterProvider">,
+  );
+  constructor(
+    providerOrOptions: MeterProvider | SdkStatsMetricsOptions,
+    legacyOptions?: Omit<SdkStatsMetricsOptions, "shortMeterProvider" | "longMeterProvider">,
+  ) {
+    let longMeterProvider: MeterProvider | undefined;
+    let shortMeterProvider: MeterProvider;
+    let distroVersion: string | undefined;
+    let networkOnly: boolean;
+    let cikey: string | undefined;
+
+    if ("shortMeterProvider" in providerOrOptions) {
+      // New options-object overload
+      longMeterProvider = providerOrOptions.longMeterProvider;
+      shortMeterProvider = providerOrOptions.shortMeterProvider;
+      distroVersion = providerOrOptions.distroVersion;
+      networkOnly = providerOrOptions.networkOnly ?? false;
+      cikey = providerOrOptions.cikey;
+    } else {
+      // Legacy single-provider overload (used by tests)
+      longMeterProvider = providerOrOptions;
+      shortMeterProvider = providerOrOptions;
+      distroVersion = legacyOptions?.distroVersion;
+      networkOnly = legacyOptions?.networkOnly ?? false;
+      cikey = legacyOptions?.cikey;
+    }
 
     // Per spec/sdkstats.md the required customDimensions on every
     // SDKStats observation are: rp, attach, runtimeVersion, os,
@@ -123,23 +164,28 @@ export class SdkStatsMetrics {
     // alongside the Azure Monitor exporter's own statsbeat — that pipeline
     // already emits them (with our distro bits bridged in via
     // `_bridge_sdkstats_to_azure_monitor`) and would collide with these.
-    if (!networkOnly) {
-      const featureGauge = meter.createObservableGauge(FEATURE_METRIC_NAME, {
+    // These gauges are registered on the long-interval MeterProvider.
+    if (!networkOnly && longMeterProvider) {
+      const longMeter = longMeterProvider.getMeter("microsoft.opentelemetry.sdkstats");
+
+      const featureGauge = longMeter.createObservableGauge(FEATURE_METRIC_NAME, {
         description: "SDKStats metric tracking enabled features",
       });
       featureGauge.addCallback(this.observeFeatures);
 
-      const instrumentationGauge = meter.createObservableGauge(INSTRUMENTATION_METRIC_NAME, {
+      const instrumentationGauge = longMeter.createObservableGauge(INSTRUMENTATION_METRIC_NAME, {
         description: "SDKStats metric tracking enabled instrumentations",
       });
       instrumentationGauge.addCallback(this.observeInstrumentations);
     }
 
-    // Network statsbeat gauges — always registered. Each callback drains
-    // the counts accumulated by exporters between observations and emits
-    // one Observation per (endpoint[, second-attr]) tuple.
+    // Network statsbeat gauges — always registered on the short-interval
+    // MeterProvider. Each callback drains the counts accumulated by
+    // exporters between observations and emits one Observation per
+    // (endpoint, host) tuple.
+    const shortMeter = shortMeterProvider.getMeter("microsoft.opentelemetry.sdkstats.network");
     for (const spec of NETWORK_GAUGE_SPECS) {
-      const gauge = meter.createObservableGauge(spec.metric, {
+      const gauge = shortMeter.createObservableGauge(spec.metric, {
         unit: spec.unit,
         description: spec.description,
       });
