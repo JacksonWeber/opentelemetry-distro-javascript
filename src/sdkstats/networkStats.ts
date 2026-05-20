@@ -81,6 +81,7 @@ export function recordSuccess(endpoint: string, host: string): void {
  *   `https://westus2-1.in.applicationinsights.azure.com` → `westus2`
  *   `http://localhost:4318/v1/traces`                    → `localhost`
  *   `https://collector.example.com:8080`                  → `collector`
+ *   `https://my-otlp-collector.example.com`               → `my-otlp-collector`
  * For non-URL inputs, returns the hostname or the raw input on failure.
  *
  * @internal
@@ -89,7 +90,7 @@ export function shortHost(input: string): string {
   if (!input) return "unknown";
   let host = input;
   try {
-    const hostRegex = /^https?:\/\/(?:www\.)?([^/.-]+)/;
+    const hostRegex = /^https?:\/\/(?:www\.)?([^/.]+)/;
     const res = hostRegex.exec(input);
     if (res && res.length > 1) {
       host = res[1];
@@ -101,6 +102,8 @@ export function shortHost(input: string): string {
       }
     }
     host = host.replace(".in.applicationinsights.azure.com", "");
+    // Strip Azure stamp suffix (e.g. westus2-1 → westus2)
+    host = host.replace(/-\d+$/, "");
     const colon = host.indexOf(":");
     if (colon > 0) host = host.slice(0, colon);
   } catch {

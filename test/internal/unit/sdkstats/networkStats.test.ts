@@ -9,6 +9,7 @@ import {
   _resetAllForTest,
   drain,
   recordSuccess,
+  shortHost,
 } from "../../../../src/sdkstats/networkStats.js";
 
 describe("sdkstats/networkStats", () => {
@@ -47,5 +48,32 @@ describe("sdkstats/networkStats", () => {
     for (const name of NETWORK_METRIC_NAMES) {
       expect(drain(name).size).toBe(0);
     }
+  });
+
+  describe("shortHost", () => {
+    it("extracts the Azure region from an AzMon ingestion URL", () => {
+      expect(shortHost("https://westus2-1.in.applicationinsights.azure.com")).toBe("westus2");
+    });
+
+    it("strips the port from localhost URLs", () => {
+      expect(shortHost("http://localhost:4318/v1/traces")).toBe("localhost");
+    });
+
+    it("extracts the first label from a plain hostname URL", () => {
+      expect(shortHost("https://collector.example.com:8080")).toBe("collector");
+    });
+
+    it("preserves hyphens in non-Azure hostnames", () => {
+      expect(shortHost("https://my-otlp-collector.example.com")).toBe("my-otlp-collector");
+      expect(shortHost("https://otel-collector-prod.example.com:4318")).toBe("otel-collector-prod");
+    });
+
+    it("returns 'unknown' for empty input", () => {
+      expect(shortHost("")).toBe("unknown");
+    });
+
+    it("returns the raw input for non-URL strings", () => {
+      expect(shortHost("not-a-url")).toBe("not-a-url");
+    });
   });
 });
