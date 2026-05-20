@@ -118,19 +118,6 @@ export class SdkStatsManager {
    * while network statsbeat gauges (`Request_Success_Count`) export on
    * the short interval (15 min).
    *
-   * @param options.networkOnly When `true`, the {@link SdkStatsMetrics}
-   *   instance only registers the network gauge(s) and skips the
-   *   feature/instrumentation gauges. Used on the Azure-Monitor-enabled
-   *   path because the AzMon exporter's own long-interval statsbeat
-   *   already emits those gauges (with our distro bits bridged in via
-   *   `AZURE_MONITOR_STATSBEAT_FEATURES`).
-   * @param options.cikey Customer iKey to report as the `cikey`
-   *   customDimension on every observation. Required by the SDKStats
-   *   spec. Omit (or pass undefined) when the customer is not exporting
-   *   to an Application Insights resource — the dimension is then
-   *   dropped from the observation entirely rather than emitted as an
-   *   empty string.
-   *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
    * or initialization failed.
