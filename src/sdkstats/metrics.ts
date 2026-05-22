@@ -134,10 +134,8 @@ export class SdkStatsMetrics {
     // Per spec/sdkstats.md the required customDimensions on every
     // SDKStats observation are: rp, attach, runtimeVersion, os,
     // language, version, cikey (plus endpoint/host on network gauges and
-    // statusCode/exceptionType where applicable). `cikey` is reported as
-    // "N/A" when the customer is not exporting to an Application Insights
-    // resource (e.g. OTLP-only / Console-only), so backend KQL queries
-    // don't have to filter out missing rows.
+    // statusCode/exceptionType where applicable). `cikey` falls back to
+    // "N/A" when unset.
     this.commonAttributes = {
       rp: "unknown",
       attach: "Manual",
