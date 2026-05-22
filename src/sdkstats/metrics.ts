@@ -61,6 +61,7 @@ export interface SdkStatsMetricsOptions {
    * on every SDKStats observation, per the Application Insights SDKStats
    * spec. Reported as `"N/A"` when undefined or empty (e.g. for OTLP-only
    * customers without an Application Insights connection string).
+   */
   cikey?: string;
   /**
    * When `true`, skip the Feature / Feature.instrumentations gauges. Used
