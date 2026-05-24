@@ -604,13 +604,13 @@ describe("setModelAttribute", () => {
                 response_metadata: {
                   model: "o4-mini-2025-04-16",
                   // LangChain duplicates `model` into `model_name` "for
-                    // backwards compat with chat completion calls". We pin a
-                    // distinct sentinel here so the assertion proves we read
-                    // the canonical `model` field first rather than coupling
-                    // to the `model_name` alias.
-                    model_name: "model_name-alias-should-be-ignored",
-                    model_provider: "openai",
-                  },
+                  // backwards compat with chat completion calls". We pin a
+                  // distinct sentinel here so the assertion proves we read
+                  // the canonical `model` field first rather than coupling
+                  // to the `model_name` alias.
+                  model_name: "model_name-alias-should-be-ignored",
+                  model_provider: "openai",
+                },
               },
             },
           ],

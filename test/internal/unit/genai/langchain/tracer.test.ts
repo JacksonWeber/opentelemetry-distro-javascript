@@ -358,24 +358,24 @@ describe("LangChainTracer", () => {
             [
               {
                 message: {
-                    // Shape produced by libs/providers/langchain-openai/src/converters/responses.ts.
-                    // We pin distinct sentinels on the fields the test is supposed
-                    // to ignore so the assertions actually prove that `model`
-                    // (canonical) and `response_metadata.id` (provider-supplied)
-                    // win over the `model_name` alias and `message.id`.
-                    response_metadata: {
-                      model_provider: "openai",
-                      model: "o4-mini-2025-04-16",
-                      model_name: "model_name-alias-should-be-ignored",
-                      id: "resp_rapi_abc",
-                      created_at: 1_700_000_000,
+                  // Shape produced by libs/providers/langchain-openai/src/converters/responses.ts.
+                  // We pin distinct sentinels on the fields the test is supposed
+                  // to ignore so the assertions actually prove that `model`
+                  // (canonical) and `response_metadata.id` (provider-supplied)
+                  // win over the `model_name` alias and `message.id`.
+                  response_metadata: {
+                    model_provider: "openai",
+                    model: "o4-mini-2025-04-16",
+                    model_name: "model_name-alias-should-be-ignored",
+                    id: "resp_rapi_abc",
+                    created_at: 1_700_000_000,
                   },
-                    usage_metadata: {
-                      input_tokens: 4,
-                      output_tokens: 7,
-                    },
-                    id: "message-id-should-be-ignored",
+                  usage_metadata: {
+                    input_tokens: 4,
+                    output_tokens: 7,
                   },
+                  id: "message-id-should-be-ignored",
+                },
               },
             ],
           ],
