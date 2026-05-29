@@ -11,6 +11,7 @@ import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
+  ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -455,12 +456,24 @@ export function getRequestModel(run: Run): string | undefined {
 // served the request).
 export function getResponseModel(run: Run): string | undefined {
   const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
+  const v1Metadata = run.outputs?.generations?.[0]?.[0]?.message?.response_metadata as
+    | Record<string, unknown>
+    | undefined;
+  const v0Metadata = run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata as
+    | Record<string, unknown>
+    | undefined;
+
   return [
-    // v1: response_metadata directly on message
-    run.outputs?.generations?.[0]?.[0]?.message?.response_metadata?.model_name,
-    // v0: response_metadata nested under kwargs
-    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
-    // LLMResult.llmOutput.model_name (common for Chat models)
+    // v1: response_metadata directly on message. Prefer the canonical OpenAI
+    // Responses-API field (`model`) and fall back to the `model_name` alias
+    // LangChain keeps "for backwards compat with chat completion calls" (see
+    // langchain-ai/langchainjs libs/providers/langchain-openai/src/converters/responses.ts).
+    v1Metadata?.model,
+    v1Metadata?.model_name,
+    // v0: response_metadata nested under kwargs.
+    v0Metadata?.model,
+    v0Metadata?.model_name,
+    // LLMResult.llmOutput.* (common for Chat Completions API).
     llmOutput?.model_name,
     llmOutput?.model,
   ]
@@ -519,6 +532,31 @@ export function setModelAttribute(run: Run, span: Span) {
 
   if (responseModel) {
     span.setAttribute(ATTR_GEN_AI_RESPONSE_MODEL, responseModel);
+  }
+}
+
+// Choice count - Helper to extract the requested number of candidate completions
+// (`n` in OpenAI / LangChain `invocation_params`). Per OTel GenAI semconv, this
+// attribute is conditionally required when available in the request and not
+// equal to 1, so we omit it for the common single-completion case to avoid
+// emitting redundant data.
+export function getChoiceCount(run: Run): number | undefined {
+  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
+  const raw = invocationParams?.n;
+  if (typeof raw === "number" && Number.isFinite(raw) && Number.isInteger(raw) && raw >= 1) {
+    return raw;
+  }
+  if (typeof raw === "string") {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed >= 1) return parsed;
+  }
+  return undefined;
+}
+
+export function setChoiceCountAttribute(run: Run, span: Span) {
+  const n = getChoiceCount(run);
+  if (n !== undefined && n !== 1) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_CHOICE_COUNT, n);
   }
 }
 
