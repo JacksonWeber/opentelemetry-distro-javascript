@@ -26,6 +26,7 @@ export const ATTR_ERROR_MESSAGE = "error.message" as const;
 // GenAI core
 export const ATTR_GEN_AI_OPERATION_NAME = "gen_ai.operation.name" as const;
 export const ATTR_GEN_AI_REQUEST_MODEL = "gen_ai.request.model" as const;
+export const ATTR_GEN_AI_REQUEST_CHOICE_COUNT = "gen_ai.request.choice.count" as const;
 export const ATTR_GEN_AI_RESPONSE_MODEL = "gen_ai.response.model" as const;
 export const ATTR_GEN_AI_RESPONSE_ID = "gen_ai.response.id" as const;
 export const ATTR_GEN_AI_PROVIDER_NAME = "gen_ai.provider.name" as const;

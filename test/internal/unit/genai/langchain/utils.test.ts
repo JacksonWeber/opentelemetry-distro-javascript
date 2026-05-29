@@ -12,6 +12,7 @@ import {
   setInputMessagesAttribute,
   setOutputMessagesAttribute,
   setModelAttribute,
+  setChoiceCountAttribute,
   setProviderNameAttribute,
   setResponseIdAttribute,
   setSessionIdAttribute,
@@ -25,6 +26,7 @@ import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
+  ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -712,6 +714,55 @@ describe("setModelAttribute", () => {
         (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
       ),
     );
+  });
+});
+
+describe("setChoiceCountAttribute", () => {
+  it("sets gen_ai.request.choice.count from invocation_params.n when > 1", () => {
+    const span = makeSpan();
+    const run = makeRun({ extra: { invocation_params: { n: 3 } } });
+    setChoiceCountAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_CHOICE_COUNT && c[1] === 3),
+    );
+  });
+
+  it("parses numeric strings", () => {
+    const span = makeSpan();
+    const run = makeRun({ extra: { invocation_params: { n: "5" } } });
+    setChoiceCountAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_CHOICE_COUNT && c[1] === 5),
+    );
+  });
+
+  it("does not emit when n === 1 (semconv: conditionally required only when != 1)", () => {
+    const span = makeSpan();
+    const run = makeRun({ extra: { invocation_params: { n: 1 } } });
+    setChoiceCountAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("does not emit when n is missing", () => {
+    const span = makeSpan();
+    const run = makeRun({ extra: { invocation_params: { model: "gpt-4o" } } });
+    setChoiceCountAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("ignores non-positive / non-integer / non-numeric values", () => {
+    for (const n of [0, -1, 1.5, "abc", null, true, [], {}]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params: { n } as Record<string, unknown> } });
+      setChoiceCountAttribute(run, span);
+      assert.strictEqual(
+        (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length,
+        0,
+        `should ignore invalid n=${JSON.stringify(n)}`,
+      );
+    }
   });
 });
 

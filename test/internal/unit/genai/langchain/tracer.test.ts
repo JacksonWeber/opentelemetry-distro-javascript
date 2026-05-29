@@ -16,6 +16,7 @@ import {
   ATTR_ERROR_MESSAGE,
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
+  ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -343,7 +344,7 @@ describe("LangChainTracer", () => {
         },
         extra: {
           metadata: { ls_model_name: "deployment-o4-mini", ls_provider: "openai" },
-          invocation_params: { model: "deployment-o4-mini" },
+          invocation_params: { model: "deployment-o4-mini", n: 3 },
         },
         inputs: {
           messages: [[{ role: "user", content: "hello" }]],
@@ -392,6 +393,11 @@ describe("LangChainTracer", () => {
         got(ATTR_GEN_AI_REQUEST_MODEL),
         "deployment-o4-mini",
         "request model should be the deployment alias",
+      );
+      assert.strictEqual(
+        got(ATTR_GEN_AI_REQUEST_CHOICE_COUNT),
+        3,
+        "request choice count should come from invocation_params.n when >1",
       );
       assert.strictEqual(
         got(ATTR_GEN_AI_RESPONSE_MODEL),
