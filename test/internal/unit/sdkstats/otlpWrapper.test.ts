@@ -16,7 +16,9 @@ import {
 import {
   EXCEPTION_COUNT_NAME,
   REQUEST_DURATION_NAME,
+  REQUEST_FAILURE_NAME,
   REQUEST_SUCCESS_NAME,
+  RETRY_COUNT_NAME,
   _resetAllForTest,
   drain,
 } from "../../../../src/sdkstats/networkStats.js";
@@ -82,7 +84,7 @@ describe("sdkstats/otlpWrapper", () => {
       expect([...success.entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 
-    it("does not record success on FAILED result, but records an exception count and duration", async () => {
+    it("records an exception on FAILED result with no error, and records duration", async () => {
       const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED });
       const wrapper = new NetworkStatsSpanExporter(inner);
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
@@ -92,11 +94,97 @@ describe("sdkstats/otlpWrapper", () => {
       const exceptions = drain(EXCEPTION_COUNT_NAME);
       expect(exceptions.size).toBe(1);
       const [key, count] = [...exceptions.entries()][0];
-      expect(key).toEqual([ENDPOINT, HOST, "ExporterFailed"]);
+      expect(key).toEqual([ENDPOINT, HOST, "Client exception"]);
       expect(count).toBe(1);
 
       // Duration is recorded regardless of outcome.
       expect(drain(REQUEST_DURATION_NAME).size).toBe(1);
+    });
+
+    it("records Request_Failure_Count with the HTTP status code when the error carries one", async () => {
+      const httpError = Object.assign(new Error("Bad Request"), {
+        name: "OTLPExporterError",
+        code: 400,
+      });
+      const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED, error: httpError });
+      const wrapper = new NetworkStatsSpanExporter(inner);
+      await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+
+      expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
+      expect(drain(EXCEPTION_COUNT_NAME).size).toBe(0);
+      const failures = drain(REQUEST_FAILURE_NAME);
+      expect([...failures.entries()]).toEqual([[[ENDPOINT, HOST, "400"], 1]]);
+    });
+
+    it("records Retry_Count when the HTTP status code is a retryable OTLP code (429/502/503/504)", async () => {
+      for (const status of [429, 502, 503, 504]) {
+        _resetAllForTest();
+        const httpError = Object.assign(new Error(""), {
+          name: "OTLPExporterError",
+          code: status,
+        });
+        const inner = makeFakeSpanExporter({
+          code: ExportResultCode.FAILED,
+          error: httpError,
+        });
+        const wrapper = new NetworkStatsSpanExporter(inner);
+        await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+        const retries = drain(RETRY_COUNT_NAME);
+        expect([...retries.entries()]).toEqual([[[ENDPOINT, HOST, String(status)], 1]]);
+        expect(drain(REQUEST_FAILURE_NAME).size).toBe(0);
+      }
+    });
+
+    it("records Retry_Count with statusCode='unknown' when upstream surfaces a synthetic retryable error", async () => {
+      const retryableError = Object.assign(new Error("Export failed with retryable status"), {
+        name: "OTLPExporterError",
+      });
+      const inner = makeFakeSpanExporter({
+        code: ExportResultCode.FAILED,
+        error: retryableError,
+      });
+      const wrapper = new NetworkStatsSpanExporter(inner);
+      await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+
+      const retries = drain(RETRY_COUNT_NAME);
+      expect([...retries.entries()]).toEqual([[[ENDPOINT, HOST, "unknown"], 1]]);
+      expect(drain(EXCEPTION_COUNT_NAME).size).toBe(0);
+    });
+
+    it("records Exception_Count with a bounded type for timeouts and network errors", async () => {
+      const cases: Array<[Error, string]> = [
+        [Object.assign(new Error("aborted"), { name: "AbortError" }), "Timeout exception"],
+        [Object.assign(new Error("timed out"), { name: "TimeoutError" }), "Timeout exception"],
+        [new Error("Request timed out"), "Timeout exception"],
+        [new TypeError("fetch failed"), "Network exception"],
+        [Object.assign(new Error("conn refused"), { code: "ECONNREFUSED" }), "Network exception"],
+        [Object.assign(new Error("dns"), { code: "ENOTFOUND" }), "Network exception"],
+      ];
+
+      for (const [err, expected] of cases) {
+        _resetAllForTest();
+        const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED, error: err });
+        const wrapper = new NetworkStatsSpanExporter(inner);
+        await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+        const exc = drain(EXCEPTION_COUNT_NAME);
+        expect([...exc.keys()][0]).toEqual([ENDPOINT, HOST, expected]);
+      }
+    });
+
+    it("ignores non-HTTP numeric codes (e.g. string-coded Node errors)", async () => {
+      // Some Node errors expose a string `code` (e.g. 'ECONNRESET'); other
+      // errors may expose a numeric code that is not an HTTP status. Both
+      // should fall through to Exception_Count rather than be misread as
+      // an HTTP failure/retry.
+      const weirdError = Object.assign(new Error("not http"), { code: 12345 });
+      const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED, error: weirdError });
+      const wrapper = new NetworkStatsSpanExporter(inner);
+      await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+
+      expect(drain(REQUEST_FAILURE_NAME).size).toBe(0);
+      expect(drain(RETRY_COUNT_NAME).size).toBe(0);
+      const exc = drain(EXCEPTION_COUNT_NAME);
+      expect([...exc.keys()][0]).toEqual([ENDPOINT, HOST, "Client exception"]);
     });
 
     it("records a request duration on SUCCESS", async () => {
@@ -141,7 +229,7 @@ describe("sdkstats/otlpWrapper", () => {
 
       const exceptions = drain(EXCEPTION_COUNT_NAME);
       expect(exceptions.size).toBe(1);
-      expect([...exceptions.keys()][0]).toEqual([ENDPOINT, HOST, "ExporterFailed"]);
+      expect([...exceptions.keys()][0]).toEqual([ENDPOINT, HOST, "Client exception"]);
       expect(drain(REQUEST_DURATION_NAME).size).toBe(1);
     });
   });
