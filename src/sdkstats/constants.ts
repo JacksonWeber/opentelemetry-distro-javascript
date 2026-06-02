@@ -6,20 +6,25 @@
  *
  * Centralizes the wire-format metric names, HTTP status-code buckets,
  * endpoint category labels, and bounded `exceptionType` strings used by
- * the network statsbeat accumulator ({@link ../networkStats.ts}), the
- * OTLP exporter wrapper ({@link ../otlpWrapper.ts}), and the A365
- * exporter ({@link ../../a365/exporter/Agent365Exporter.ts}).
+ * the network statsbeat accumulator ({@link ./networkStats}), the OTLP
+ * exporter wrapper ({@link ./otlpWrapper}), and the A365 exporter
+ * ({@link ../a365/exporter/Agent365Exporter}).
  *
  * Ideally the wire-format metric names would be imported directly from
  * the `StatsbeatCounter` enum in `@azure/monitor-opentelemetry-exporter`
- * so we have a single source of truth. That package, however, only
- * publishes the enum at
- * `dist/{esm,commonjs}/export/statsbeat/types.{js,d.ts}` and its
- * `package.json#exports` field restricts subpath imports to `.` and
- * `./package.json`, so the enum is not part of its public surface. We
- * mirror the values here and keep them in lockstep with the upstream
- * enum — sending envelopes under any other name returns HTTP 200 but
- * the AzMon SDKStats backend doesn't index them.
+ * so we have a single source of truth. That enum is currently shipped at
+ * `dist/{esm,commonjs}/export/statsbeat/types.{js,d.ts}`, but the
+ * package's `package.json#exports` field only publishes `.` and
+ * `./package.json`, so under our `moduleResolution: NodeNext` config a
+ * direct `import { StatsbeatCounter } from
+ * "@azure/monitor-opentelemetry-exporter/dist/esm/export/statsbeat/types.js"`
+ * fails with `TS2307: Cannot find module … or its corresponding type
+ * declarations`. Until the exporter exposes the enum from its public
+ * entry point (tracked upstream in
+ * https://github.com/Azure/azure-sdk-for-js, sdk/monitor/monitor-opentelemetry-exporter)
+ * we mirror the values here and keep them in lockstep — sending envelopes
+ * under any other name returns HTTP 200 but the AzMon SDKStats backend
+ * doesn't index them.
  */
 
 // ---------------------------------------------------------------------------
