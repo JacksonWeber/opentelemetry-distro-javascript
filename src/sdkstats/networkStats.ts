@@ -15,35 +15,35 @@
  * distro.
  */
 
-// Metric names must match the AzMon SDKStats backend's recognized
-// schema (see `StatsbeatCounter` enum in
-// `@azure/monitor-opentelemetry-exporter/dist/esm/export/statsbeat/types.js`).
-// Sending envelopes under any other name returns HTTP 200 but the
-// backend doesn't index them, so they're invisible in the SDKStats
-// dashboards. The constants below intentionally match the wire-format
-// names — do NOT rename them.
-export const REQUEST_SUCCESS_NAME = "Request_Success_Count";
-export const REQUEST_FAILURE_NAME = "Request_Failure_Count";
-export const REQUEST_DURATION_NAME = "Request_Duration";
-export const RETRY_COUNT_NAME = "Retry_Count";
-export const THROTTLE_COUNT_NAME = "Throttle_Count";
-export const EXCEPTION_COUNT_NAME = "Exception_Count";
-
-/**
- * Names of registered network SDKStats metrics, in registration order.
- *
- * @internal
- */
-export const NETWORK_METRIC_NAMES = [
+// Wire-format metric names and the set of HTTP status-code buckets used
+// below live in `./constants.js` so the OTLP/A365 exporter wrappers can
+// share a single source of truth. Re-exported here for backwards
+// compatibility with existing imports of these symbols from
+// `./networkStats.js`.
+import {
   REQUEST_SUCCESS_NAME,
   REQUEST_FAILURE_NAME,
   REQUEST_DURATION_NAME,
   RETRY_COUNT_NAME,
   THROTTLE_COUNT_NAME,
   EXCEPTION_COUNT_NAME,
-] as const;
+  NETWORK_METRIC_NAMES,
+  RETRY_STATUSES,
+  THROTTLE_STATUSES,
+  IGNORED_STATUSES,
+  type NetworkMetricName,
+} from "./constants.js";
 
-export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
+export {
+  REQUEST_SUCCESS_NAME,
+  REQUEST_FAILURE_NAME,
+  REQUEST_DURATION_NAME,
+  RETRY_COUNT_NAME,
+  THROTTLE_COUNT_NAME,
+  EXCEPTION_COUNT_NAME,
+  NETWORK_METRIC_NAMES,
+};
+export type { NetworkMetricName };
 
 /**
  * Composite key for an aggregated network SDKStats counter.
@@ -142,12 +142,6 @@ export function recordDuration(endpoint: string, host: string, durationMs: numbe
  *   followed transparently and never reported).
  */
 export type StatusCodeKind = "success" | "retry" | "throttle" | "failure" | "ignored";
-
-const RETRY_STATUSES = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
-const THROTTLE_STATUSES = new Set([402, 439]);
-// 206 is handled by the caller (per-envelope breakdown). 307/308 are
-// followed by the HTTP client transparently and are not reported.
-const IGNORED_STATUSES = new Set([206, 307, 308]);
 
 export function classifyStatusCode(status: number): StatusCodeKind {
   if (status >= 200 && status < 300 && status !== 206) return "success";

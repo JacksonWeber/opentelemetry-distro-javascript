@@ -22,12 +22,20 @@ import {
   _resetAllForTest,
   drain,
 } from "../../../../src/sdkstats/networkStats.js";
+import {
+  EXC_CLIENT,
+  EXC_NETWORK,
+  EXC_TIMEOUT,
+  OTLP_ENDPOINT_CATEGORY,
+  OTLP_HTTP_RETRYABLE_STATUSES,
+  OTLP_UNKNOWN_STATUS,
+} from "../../../../src/sdkstats/constants.js";
 
 // `shortHost("https://collector.example.com:4318")` strips the first
 // path component, so the dimension value the wrappers record is just
-// "collector". `endpoint` is the category label ("otlp").
+// "collector". `endpoint` is the category label (OTLP_ENDPOINT_CATEGORY).
 const HOST = "collector";
-const ENDPOINT = "otlp";
+const ENDPOINT = OTLP_ENDPOINT_CATEGORY;
 
 function setEndpointEnv(): void {
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `https://collector.example.com:4318`;
@@ -94,7 +102,7 @@ describe("sdkstats/otlpWrapper", () => {
       const exceptions = drain(EXCEPTION_COUNT_NAME);
       expect(exceptions.size).toBe(1);
       const [key, count] = [...exceptions.entries()][0];
-      expect(key).toEqual([ENDPOINT, HOST, "Client exception"]);
+      expect(key).toEqual([ENDPOINT, HOST, EXC_CLIENT]);
       expect(count).toBe(1);
 
       // Duration is recorded regardless of outcome.
@@ -117,7 +125,7 @@ describe("sdkstats/otlpWrapper", () => {
     });
 
     it("records Retry_Count when the HTTP status code is a retryable OTLP code (429/502/503/504)", async () => {
-      for (const status of [429, 502, 503, 504]) {
+      for (const status of OTLP_HTTP_RETRYABLE_STATUSES) {
         _resetAllForTest();
         const httpError = Object.assign(new Error(""), {
           name: "OTLPExporterError",
@@ -147,18 +155,18 @@ describe("sdkstats/otlpWrapper", () => {
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
 
       const retries = drain(RETRY_COUNT_NAME);
-      expect([...retries.entries()]).toEqual([[[ENDPOINT, HOST, "unknown"], 1]]);
+      expect([...retries.entries()]).toEqual([[[ENDPOINT, HOST, OTLP_UNKNOWN_STATUS], 1]]);
       expect(drain(EXCEPTION_COUNT_NAME).size).toBe(0);
     });
 
     it("records Exception_Count with a bounded type for timeouts and network errors", async () => {
       const cases: Array<[Error, string]> = [
-        [Object.assign(new Error("aborted"), { name: "AbortError" }), "Timeout exception"],
-        [Object.assign(new Error("timed out"), { name: "TimeoutError" }), "Timeout exception"],
-        [new Error("Request timed out"), "Timeout exception"],
-        [new TypeError("fetch failed"), "Network exception"],
-        [Object.assign(new Error("conn refused"), { code: "ECONNREFUSED" }), "Network exception"],
-        [Object.assign(new Error("dns"), { code: "ENOTFOUND" }), "Network exception"],
+        [Object.assign(new Error("aborted"), { name: "AbortError" }), EXC_TIMEOUT],
+        [Object.assign(new Error("timed out"), { name: "TimeoutError" }), EXC_TIMEOUT],
+        [new Error("Request timed out"), EXC_TIMEOUT],
+        [new TypeError("fetch failed"), EXC_NETWORK],
+        [Object.assign(new Error("conn refused"), { code: "ECONNREFUSED" }), EXC_NETWORK],
+        [Object.assign(new Error("dns"), { code: "ENOTFOUND" }), EXC_NETWORK],
       ];
 
       for (const [err, expected] of cases) {
@@ -184,7 +192,7 @@ describe("sdkstats/otlpWrapper", () => {
       expect(drain(REQUEST_FAILURE_NAME).size).toBe(0);
       expect(drain(RETRY_COUNT_NAME).size).toBe(0);
       const exc = drain(EXCEPTION_COUNT_NAME);
-      expect([...exc.keys()][0]).toEqual([ENDPOINT, HOST, "Client exception"]);
+      expect([...exc.keys()][0]).toEqual([ENDPOINT, HOST, EXC_CLIENT]);
     });
 
     it("records a request duration on SUCCESS", async () => {
@@ -229,7 +237,7 @@ describe("sdkstats/otlpWrapper", () => {
 
       const exceptions = drain(EXCEPTION_COUNT_NAME);
       expect(exceptions.size).toBe(1);
-      expect([...exceptions.keys()][0]).toEqual([ENDPOINT, HOST, "Client exception"]);
+      expect([...exceptions.keys()][0]).toEqual([ENDPOINT, HOST, EXC_CLIENT]);
       expect(drain(REQUEST_DURATION_NAME).size).toBe(1);
     });
   });

@@ -16,6 +16,7 @@ import {
   _resetAllForTest,
   drain,
 } from "../../../../src/sdkstats/networkStats.js";
+import { A365_ENDPOINT_CATEGORY } from "../../../../src/sdkstats/constants.js";
 import { _resetA365LoggerForTest } from "../../../../src/a365/logging.js";
 
 const TENANT_ID = "tenant-11111111-1111-1111-1111-111111111111";
@@ -134,7 +135,7 @@ describe("Agent365Exporter network SDKStats", () => {
     const failures = drain(REQUEST_FAILURE_NAME);
     expect(failures.size).toBe(1);
     const [key, count] = [...failures.entries()][0];
-    expect(key[0]).toBe("a365");
+    expect(key[0]).toBe(A365_ENDPOINT_CATEGORY);
     expect(key[2]).toBe("404");
     expect(count).toBe(1);
   });
@@ -189,7 +190,7 @@ describe("Agent365Exporter network SDKStats", () => {
     const exceptions = drain(EXCEPTION_COUNT_NAME);
     expect(exceptions.size).toBe(1);
     const [key, count] = [...exceptions.entries()][0];
-    expect(key[0]).toBe("a365");
+    expect(key[0]).toBe(A365_ENDPOINT_CATEGORY);
     // 4 attempts (initial + 3 retries) each throw.
     expect(count).toBe(4);
   });
@@ -203,7 +204,7 @@ describe("Agent365Exporter network SDKStats", () => {
     const durations = drain(REQUEST_DURATION_NAME);
     expect(durations.size).toBe(1);
     const [key, avg] = [...durations.entries()][0];
-    expect(key[0]).toBe("a365");
+    expect(key[0]).toBe(A365_ENDPOINT_CATEGORY);
     expect(avg).toBeGreaterThanOrEqual(0);
   });
 });
