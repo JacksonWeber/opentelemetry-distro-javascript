@@ -15,6 +15,7 @@
 export const GEN_AI_OPERATION_INVOKE_AGENT = "invoke_agent" as const;
 export const GEN_AI_OPERATION_EXECUTE_TOOL = "execute_tool" as const;
 export const GEN_AI_OPERATION_OUTPUT_MESSAGES = "output_messages" as const;
+export const GEN_AI_OPERATION_APPLY_GUARDRAIL = "apply_guardrail" as const;
 export const GEN_AI_OPERATION_CHAT = "chat" as const;
 
 // --- Attributes (ATTR_ prefix, following OTel convention) ---
@@ -26,6 +27,7 @@ export const ATTR_ERROR_MESSAGE = "error.message" as const;
 // GenAI core
 export const ATTR_GEN_AI_OPERATION_NAME = "gen_ai.operation.name" as const;
 export const ATTR_GEN_AI_REQUEST_MODEL = "gen_ai.request.model" as const;
+export const ATTR_GEN_AI_REQUEST_CHOICE_COUNT = "gen_ai.request.choice.count" as const;
 export const ATTR_GEN_AI_RESPONSE_MODEL = "gen_ai.response.model" as const;
 export const ATTR_GEN_AI_RESPONSE_ID = "gen_ai.response.id" as const;
 export const ATTR_GEN_AI_PROVIDER_NAME = "gen_ai.provider.name" as const;

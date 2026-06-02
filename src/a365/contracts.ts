@@ -11,10 +11,11 @@
 import type { SpanKind, TimeInput, Link, Context, TraceState } from "@opentelemetry/api";
 
 // ---------------------------------------------------------------------------
-// Message schema version
+// Default finish reason (per OTel spec)
 // ---------------------------------------------------------------------------
 
-export const A365_MESSAGE_SCHEMA_VERSION = "0.1.0" as const;
+/** Default finish reason applied when none is provided (per OTel spec). */
+export const DEFAULT_FINISH_REASON = "stop" as const;
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -171,27 +172,26 @@ export interface ChatMessage {
   name?: string;
 }
 
-/** Versioned wrapper for input messages. */
 export interface InputMessages {
-  version: typeof A365_MESSAGE_SCHEMA_VERSION;
   messages: ChatMessage[];
 }
 
-/** An output message produced by a model (OTEL gen-ai semantic conventions). */
+/**
+ * An output message produced by a model (OTEL gen-ai semantic conventions).
+ * `finish_reason` defaults to `"stop"` per OTel spec when not provided.
+ */
 export interface OutputMessage extends ChatMessage {
   finish_reason?: FinishReason | string;
 }
 
-/** Versioned wrapper for output messages. */
 export interface OutputMessages {
-  version: typeof A365_MESSAGE_SCHEMA_VERSION;
   messages: OutputMessage[];
 }
 
-/** Accepted input for `recordInputMessages`. */
+/** Accepted input for `recordInputMessages`. Supports a single string, an array of strings (backward compat), or the structured wrapper. */
 export type InputMessagesParam = string | string[] | InputMessages;
 
-/** Accepted input for `recordOutputMessages`. */
+/** Accepted input for `recordOutputMessages`. Supports a single string, an array of strings (backward compat), or the structured wrapper. */
 export type OutputMessagesParam = string | string[] | OutputMessages;
 
 /** Accepted input for `OutputResponse.messages`. */
@@ -336,4 +336,138 @@ export interface SpanDetails {
   endTime?: TimeInput;
   spanKind?: SpanKind;
   spanLinks?: Link[];
+}
+
+// ---------------------------------------------------------------------------
+// Guardrail / Security Contracts
+// ---------------------------------------------------------------------------
+
+/**
+ * The decision made by a security guardian during guardrail evaluation.
+ */
+export enum GuardrailDecisionType {
+  /** Content or action is allowed to proceed. */
+  Allow = "allow",
+
+  /** Content or action is logged for review but allowed to proceed. */
+  Audit = "audit",
+
+  /** Content or action is denied/blocked. */
+  Deny = "deny",
+
+  /** Content was modified (e.g., redacted, sanitized, rewritten). */
+  Modify = "modify",
+
+  /** Content or action triggered a warning but is allowed to proceed. */
+  Warn = "warn",
+}
+
+/**
+ * Well-known severity levels for security risks detected by guardrails.
+ */
+export const GuardrailRiskSeverity = {
+  None: "none",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical",
+} as const;
+
+/**
+ * Well-known values for the type of content or action a guardrail is applied to.
+ * Custom strings are also accepted.
+ */
+export const GuardrailTargetType = {
+  LlmInput: "llm_input",
+  LlmOutput: "llm_output",
+  ToolCall: "tool_call",
+  ToolDefinition: "tool_definition",
+  MemoryStore: "memory_store",
+  MemoryRetrieve: "memory_retrieve",
+  KnowledgeQuery: "knowledge_query",
+  KnowledgeResult: "knowledge_result",
+  Message: "message",
+} as const;
+
+/**
+ * Details of a guardrail evaluation for security operations tracing.
+ */
+export interface GuardrailDetails {
+  /** The type of content or action the guardrail is applied to (required). */
+  targetType: string;
+
+  /** The decision made by the guardian (required). */
+  decisionType: GuardrailDecisionType;
+
+  /** Human-readable name of the guardian. */
+  guardianName?: string;
+
+  /** Unique identifier of the guardian. */
+  guardianId?: string;
+
+  /** Provider of the guardian service (e.g., azure.ai.content_safety). */
+  guardianProviderName?: string;
+
+  /** Version of the guardian. */
+  guardianVersion?: string;
+
+  /** Identifier of the target being guarded. */
+  targetId?: string;
+
+  /** Human-readable explanation for the decision. */
+  decisionReason?: string;
+
+  /** Machine-readable decision code. */
+  decisionCode?: string;
+
+  /** Identifier of the policy that triggered the decision. */
+  policyId?: string;
+
+  /** Human-readable name of the policy. */
+  policyName?: string;
+
+  /** Version of the policy. */
+  policyVersion?: string;
+
+  /** Hash of the input content for forensic correlation. */
+  contentInputHash?: string;
+
+  /** Whether content was modified by the guardrail. */
+  contentModified?: boolean;
+
+  /** External correlation identifier for SIEM systems. */
+  externalEventId?: string;
+}
+
+/**
+ * Represents a single security finding detected during guardian evaluation.
+ * Multiple findings may be emitted for a single guardrail span.
+ */
+export interface GuardrailFinding {
+  /** The category of security risk detected (required). */
+  riskCategory: string;
+
+  /** The severity level of the detected risk (required). */
+  riskSeverity: string;
+
+  /** The decision type for this specific policy finding. */
+  policyDecisionType?: string;
+
+  /** Identifier of the policy that triggered the finding. */
+  policyId?: string;
+
+  /** Human-readable name of the triggered policy. */
+  policyName?: string;
+
+  /** Version of the policy. */
+  policyVersion?: string;
+
+  /** Numeric risk/confidence score (0.0 to 1.0). */
+  riskScore?: number;
+
+  /**
+   * Non-content metadata about the detected risk (MUST NOT contain PII).
+   * Example values: "field:bcc", "pattern:ssn", "count:3".
+   */
+  riskMetadata?: string[];
 }

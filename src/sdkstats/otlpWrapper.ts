@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Network statsbeat wrappers for OTLP exporters.
+ * Network SDKStats wrappers for OTLP exporters.
  *
  * Decorates upstream OTLP HTTP exporters so the network SDKStats pipeline
  * can record per-export success/failure/retry/throttle/exception counts
@@ -216,7 +216,7 @@ function wrapExport<T>(
 }
 
 /**
- * Span exporter decorator that records network statsbeat counts.
+ * Span exporter decorator that records network SDKStats counts.
  */
 export class NetworkStatsSpanExporter implements SpanExporter {
   private readonly host: string;
@@ -239,7 +239,7 @@ export class NetworkStatsSpanExporter implements SpanExporter {
 }
 
 /**
- * Metric exporter decorator that records network statsbeat counts.
+ * Metric exporter decorator that records network SDKStats counts.
  *
  * `selectAggregationTemporality` / `selectAggregation` are forwarded only
  * when the inner exporter defines them — preserving its preferences while
@@ -275,7 +275,7 @@ export class NetworkStatsMetricExporter implements PushMetricExporter {
 }
 
 /**
- * Log exporter decorator that records network statsbeat counts.
+ * Log exporter decorator that records network SDKStats counts.
  */
 export class NetworkStatsLogExporter implements LogRecordExporter {
   private readonly host: string;
@@ -288,11 +288,11 @@ export class NetworkStatsLogExporter implements LogRecordExporter {
     wrapExport(this.host, (cb) => this.inner.export(logs, cb), resultCallback, logs);
   }
 
-  shutdown(): Promise<void> {
-    return this.inner.shutdown();
-  }
-
   forceFlush(): Promise<void> {
     return this.inner.forceFlush?.() ?? Promise.resolve();
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown();
   }
 }

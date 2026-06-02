@@ -7,7 +7,13 @@ export type { A365Options, ClusterCategory, ILogger } from "./configuration/inde
 export { configureA365Logger, getA365Logger } from "./logging.js";
 
 export { Agent365Exporter } from "./exporter/index.js";
-export type { Agent365ExporterOptions, TokenResolver } from "./exporter/index.js";
+export type {
+  Agent365ExporterOptions,
+  TokenResolver,
+  ContextualTokenResolver,
+  AgentIdentity,
+  TokenResolverContext,
+} from "./exporter/index.js";
 export { ResolvedExporterOptions } from "./exporter/index.js";
 
 // ── Scopes (manual telemetry API) ───────────────────────────────────────────
@@ -17,6 +23,7 @@ export {
   ExecuteToolScope,
   InferenceScope,
   OutputScope,
+  ApplyGuardrailScope,
 } from "./scopes/index.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -29,7 +36,10 @@ export {
   Modality,
   InvocationRole,
   InferenceOperationType,
-  A365_MESSAGE_SCHEMA_VERSION,
+  DEFAULT_FINISH_REASON,
+  GuardrailDecisionType,
+  GuardrailRiskSeverity,
+  GuardrailTargetType,
 } from "./contracts.js";
 export type {
   ChatMessage,
@@ -58,6 +68,8 @@ export type {
   SpanDetails,
   ParentSpanRef,
   ParentContext,
+  GuardrailDetails,
+  GuardrailFinding,
 } from "./contracts.js";
 
 // ── Context propagation ─────────────────────────────────────────────────────

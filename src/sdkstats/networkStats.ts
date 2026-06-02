@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Network statsbeat accumulator for SDK self-telemetry.
+ * Network SDKStats accumulator for SDK self-telemetry.
  *
  * Per-export counters and timings for telemetry exporters. Exporters call
  * the {@link recordSuccess} / {@link recordFailure} / {@link recordRetry} /
@@ -15,11 +15,11 @@
  * distro.
  */
 
-// Metric names must match the AzMon statsbeat backend's recognized
+// Metric names must match the AzMon SDKStats backend's recognized
 // schema (see `StatsbeatCounter` enum in
 // `@azure/monitor-opentelemetry-exporter/dist/esm/export/statsbeat/types.js`).
 // Sending envelopes under any other name returns HTTP 200 but the
-// backend doesn't index them, so they're invisible in the statsbeat
+// backend doesn't index them, so they're invisible in the SDKStats
 // dashboards. The constants below intentionally match the wire-format
 // names — do NOT rename them.
 export const REQUEST_SUCCESS_NAME = "Request_Success_Count";
@@ -30,7 +30,7 @@ export const THROTTLE_COUNT_NAME = "Throttle_Count";
 export const EXCEPTION_COUNT_NAME = "Exception_Count";
 
 /**
- * Names of registered network statsbeat metrics, in registration order.
+ * Names of registered network SDKStats metrics, in registration order.
  *
  * @internal
  */
@@ -46,7 +46,7 @@ export const NETWORK_METRIC_NAMES = [
 export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
 
 /**
- * Composite key for an aggregated network statsbeat counter.
+ * Composite key for an aggregated network SDKStats counter.
  *
  * Per the Application Insights SDKStats spec the per-key dimensions are
  * `endpoint` (category, e.g. "otlp", "a365") and `host` (stamp-specific
@@ -160,7 +160,7 @@ export function classifyStatusCode(status: number): StatusCodeKind {
 /**
  * Compute the stamp-specific short host for the SDKStats `host` dimension.
  *
- * Mirrors `getShortHost` in the AzMon exporter's `NetworkStatsbeatMetrics`
+ * Mirrors `getShortHost` in the AzMon exporter's `NetworkStatsbeatMetrics` class
  * but additionally strips any trailing port (`:4318`) so localhost-style
  * URLs report a clean `localhost` instead of `localhost:4318`. Examples:
  *   `https://westus2-1.in.applicationinsights.azure.com` → `westus2`
@@ -227,7 +227,7 @@ export function drain(metric: NetworkMetricName): Map<NetworkKey, number> {
 }
 
 /**
- * @internal Test-only: clear all network statsbeat counters.
+ * @internal Test-only: clear all network SDKStats counters.
  */
 export function _resetAllForTest(): void {
   for (const name of NETWORK_METRIC_NAMES) {
