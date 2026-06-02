@@ -36,6 +36,12 @@ import {
   classifyStatusCode,
   shortHost,
 } from "../../sdkstats/index.js";
+import {
+  A365_ENDPOINT_CATEGORY,
+  EXC_TIMEOUT,
+  EXC_NETWORK,
+  EXC_CLIENT,
+} from "../../sdkstats/constants.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -288,7 +294,7 @@ export class Agent365Exporter implements SpanExporter {
     // the URL or re-checking env on every iteration. `endpoint` is the
     // category label per spec — A365 transmits report endpoint="a365".
     const recordA365Stats = isSdkStatsEnabled();
-    const endpointCategory = "a365";
+    const endpointCategory = A365_ENDPOINT_CATEGORY;
     let host = url;
     if (recordA365Stats) {
       host = shortHost(url);
@@ -530,11 +536,11 @@ function sleep(ms: number): Promise<void> {
 function classifyExceptionType(error: unknown): string {
   if (error instanceof Error) {
     const name = error.name;
-    if (name === "AbortError" || name === "TimeoutError") return "Timeout exception";
-    if (name === "TypeError") return "Network exception";
-    return name || "Client exception";
+    if (name === "AbortError" || name === "TimeoutError") return EXC_TIMEOUT;
+    if (name === "TypeError") return EXC_NETWORK;
+    return name || EXC_CLIENT;
   }
-  return "Client exception";
+  return EXC_CLIENT;
 }
 
 /**

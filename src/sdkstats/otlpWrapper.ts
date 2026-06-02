@@ -46,44 +46,15 @@ import {
   recordDuration,
   shortHost,
 } from "./networkStats.js";
-
-/** Per spec, `endpoint` is a category label, not the destination URL. */
-const OTLP_ENDPOINT_CATEGORY = "otlp";
-
-/**
- * Sentinel `statusCode` dimension used when the upstream OTLP delegate
- * has discarded the original HTTP status code (currently the retryable
- * 429/502/503/504 path). Keeps the dimension present per spec.
- */
-const OTLP_UNKNOWN_STATUS = "unknown";
-
-/**
- * Bounded set of `exceptionType` labels for OTLP `Exception_Count`.
- * Cardinality must stay bounded so the SDKStats backend can index it.
- */
-const EXC_TIMEOUT = "Timeout exception";
-const EXC_NETWORK = "Network exception";
-const EXC_CLIENT = "Client exception";
-
-const RETRYABLE_NETWORK_ERROR_CODES = new Set([
-  "ECONNRESET",
-  "ECONNREFUSED",
-  "EPIPE",
-  "ETIMEDOUT",
-  "EAI_AGAIN",
-  "ENOTFOUND",
-  "ENETUNREACH",
-  "EHOSTUNREACH",
-]);
-
-/**
- * Per the OTLP/HTTP response specification, retryable HTTP status codes
- * are 429, 502, 503, and 504. The upstream delegate normally routes
- * these through its `retryable` branch (no status code surfaced), but
- * we classify defensively here for the rare case the failure branch
- * still carries a retryable code (e.g. retries exhausted).
- */
-const OTLP_HTTP_RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+import {
+  OTLP_ENDPOINT_CATEGORY,
+  OTLP_UNKNOWN_STATUS,
+  OTLP_HTTP_RETRYABLE_STATUSES,
+  RETRYABLE_NETWORK_ERROR_CODES,
+  EXC_TIMEOUT,
+  EXC_NETWORK,
+  EXC_CLIENT,
+} from "./constants.js";
 
 interface ErrorWithCode {
   code?: unknown;
