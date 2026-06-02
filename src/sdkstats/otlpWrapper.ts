@@ -4,13 +4,26 @@
 /**
  * Network SDKStats wrappers for OTLP exporters.
  *
- * The upstream OTLP HTTP exporters do not surface HTTP status codes — only
- * the {@link ExportResult} enum and any raised exception. The decorators
- * here capture that signal so the network SDKStats pipeline can record
- * success counts per endpoint.
+ * Decorates upstream OTLP HTTP exporters so the network SDKStats pipeline
+ * can record per-export success/failure/retry/throttle/exception counts
+ * and request duration per the Application Insights SDKStats Network
+ * specification (`endpoint="otlp"`, per-host).
  *
- * Mirrors `src/microsoft/opentelemetry/_sdkstats/_otlp_wrapper.py` from the
- * Python distro (microsoft/opentelemetry-distro-python#144).
+ * ## Upstream signal availability
+ *
+ * The upstream `@opentelemetry/otlp-exporter-base` delegate only exposes
+ * `ExportResult` (SUCCESS/FAILED) plus an optional `error`. For
+ * non-retryable HTTP responses the error is an `OTLPExporterError`
+ * carrying the HTTP `code`, so we can record `Request_Failure_Count`
+ * with the actual status. For HTTP responses the OTLP/HTTP spec
+ * classifies as retryable (429, 502, 503, 504) the upstream constructs
+ * a synthetic error with no `code`, so the original status is lost; we
+ * record `Retry_Count` with `statusCode="unknown"` in that case.
+ * Network errors, timeouts, and other thrown exceptions are recorded as
+ * `Exception_Count` with a bounded set of `exceptionType` labels.
+ *
+ * Mirrors `src/microsoft/opentelemetry/_sdkstats/_otlp_wrapper.py` from
+ * the Python distro (microsoft/opentelemetry-distro-python#144).
  */
 
 import type { ExportResult } from "@opentelemetry/core";
@@ -25,10 +38,123 @@ import type {
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-logs";
 
-import { recordSuccess, shortHost } from "./networkStats.js";
+import {
+  recordSuccess,
+  recordFailure,
+  recordRetry,
+  recordException,
+  recordDuration,
+  shortHost,
+} from "./networkStats.js";
 
 /** Per spec, `endpoint` is a category label, not the destination URL. */
 const OTLP_ENDPOINT_CATEGORY = "otlp";
+
+/**
+ * Sentinel `statusCode` dimension used when the upstream OTLP delegate
+ * has discarded the original HTTP status code (currently the retryable
+ * 429/502/503/504 path). Keeps the dimension present per spec.
+ */
+const OTLP_UNKNOWN_STATUS = "unknown";
+
+/**
+ * Bounded set of `exceptionType` labels for OTLP `Exception_Count`.
+ * Cardinality must stay bounded so the SDKStats backend can index it.
+ */
+const EXC_TIMEOUT = "Timeout exception";
+const EXC_NETWORK = "Network exception";
+const EXC_CLIENT = "Client exception";
+
+const RETRYABLE_NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EPIPE",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+]);
+
+/**
+ * Per the OTLP/HTTP response specification, retryable HTTP status codes
+ * are 429, 502, 503, and 504. The upstream delegate normally routes
+ * these through its `retryable` branch (no status code surfaced), but
+ * we classify defensively here for the rare case the failure branch
+ * still carries a retryable code (e.g. retries exhausted).
+ */
+const OTLP_HTTP_RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+
+interface ErrorWithCode {
+  code?: unknown;
+  name?: unknown;
+  message?: unknown;
+}
+
+function asErrorWithCode(err: unknown): ErrorWithCode | undefined {
+  return typeof err === "object" && err !== null ? (err as ErrorWithCode) : undefined;
+}
+
+/**
+ * Treat `error.code` as an HTTP status code only when it is an integer
+ * in a plausible HTTP response range. Guards against arbitrary numeric
+ * `code` fields on non-HTTP errors.
+ */
+function asHttpStatus(code: unknown): number | undefined {
+  if (typeof code !== "number" || !Number.isInteger(code)) return undefined;
+  if (code < 100 || code > 599) return undefined;
+  return code;
+}
+
+function classifyExceptionType(error: unknown): string {
+  const err = asErrorWithCode(error);
+  if (!err) return EXC_CLIENT;
+  const name = typeof err.name === "string" ? err.name : "";
+  if (name === "AbortError" || name === "TimeoutError") return EXC_TIMEOUT;
+  if (typeof err.message === "string" && err.message === "Request timed out") return EXC_TIMEOUT;
+  if (name === "TypeError") return EXC_NETWORK;
+  if (typeof err.code === "string" && RETRYABLE_NETWORK_ERROR_CODES.has(err.code)) {
+    return EXC_NETWORK;
+  }
+  return EXC_CLIENT;
+}
+
+/**
+ * Record the appropriate SDKStats counter for an OTLP export failure,
+ * given the host and the error surfaced by the upstream delegate.
+ *
+ * See file-level "Upstream signal availability" comment for rationale.
+ */
+function recordOtlpFailure(host: string, error: unknown): void {
+  const err = asErrorWithCode(error);
+  const httpStatus = err ? asHttpStatus(err.code) : undefined;
+
+  if (httpStatus !== undefined) {
+    // The OTLP/HTTP "throttle" classification additionally requires a
+    // Retry-After header that the upstream delegate does not expose to
+    // us, so we conservatively bucket 429 as retry rather than throttle.
+    if (OTLP_HTTP_RETRYABLE_STATUSES.has(httpStatus)) {
+      recordRetry(OTLP_ENDPOINT_CATEGORY, host, httpStatus);
+    } else {
+      recordFailure(OTLP_ENDPOINT_CATEGORY, host, httpStatus);
+    }
+    return;
+  }
+
+  // Upstream delegate's synthetic message for HTTP retryable responses
+  // (429/502/503/504) discards the status code. Record as retry with an
+  // "unknown" status code so the dimension stays present per spec.
+  if (
+    err &&
+    typeof err.message === "string" &&
+    err.message === "Export failed with retryable status"
+  ) {
+    recordRetry(OTLP_ENDPOINT_CATEGORY, host, OTLP_UNKNOWN_STATUS);
+    return;
+  }
+
+  recordException(OTLP_ENDPOINT_CATEGORY, host, classifyExceptionType(error));
+}
 
 /**
  * Resolve the short-host string for a given OTLP signal.
@@ -55,8 +181,9 @@ function resolveShortHost(signal: "traces" | "metrics" | "logs"): string {
 /**
  * Common bookkeeping for an export attempt.
  *
- * On `ExportResultCode.SUCCESS` we record a success count. Other outcomes
- * (failure, exception, duration) will be added in a future PR.
+ * Records success/exception counters and request duration regardless of
+ * outcome, per the SDKStats spec ("Request_Duration ... avg request
+ * duration for all requests during the scheduled interval").
  */
 function wrapExport<T>(
   host: string,
@@ -64,14 +191,28 @@ function wrapExport<T>(
   resultCallback: (result: ExportResult) => void,
   _items: T,
 ): void {
+  const start = Date.now();
+  let settled = false;
   const settle = (result: ExportResult): void => {
+    if (settled) return;
+    settled = true;
+    recordDuration(OTLP_ENDPOINT_CATEGORY, host, Date.now() - start);
     if (result.code === ExportResultCode.SUCCESS) {
       recordSuccess(OTLP_ENDPOINT_CATEGORY, host);
+    } else {
+      recordOtlpFailure(host, result.error);
     }
     resultCallback(result);
   };
 
-  inner(settle);
+  try {
+    inner(settle);
+  } catch (err) {
+    settle({
+      code: ExportResultCode.FAILED,
+      error: err instanceof Error ? err : new Error(String(err)),
+    });
+  }
 }
 
 /**
@@ -148,7 +289,7 @@ export class NetworkStatsLogExporter implements LogRecordExporter {
   }
 
   forceFlush(): Promise<void> {
-    return this.inner.forceFlush ? this.inner.forceFlush() : Promise.resolve();
+    return this.inner.forceFlush?.() ?? Promise.resolve();
   }
 
   shutdown(): Promise<void> {
