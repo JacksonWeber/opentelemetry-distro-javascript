@@ -22,6 +22,12 @@ import {
   recordThrottle,
   shortHost,
 } from "../../../../src/sdkstats/networkStats.js";
+import {
+  A365_ENDPOINT_CATEGORY,
+  EXC_NETWORK,
+  EXC_TIMEOUT,
+  OTLP_ENDPOINT_CATEGORY,
+} from "../../../../src/sdkstats/constants.js";
 
 describe("sdkstats/networkStats", () => {
   beforeEach(() => {
@@ -46,11 +52,11 @@ describe("sdkstats/networkStats", () => {
   });
 
   it("records failure/retry/throttle counts keyed by (endpoint, host, statusCode)", () => {
-    recordFailure("a365", "westus", 400);
-    recordFailure("a365", "westus", 400);
-    recordFailure("a365", "westus", 404);
-    recordRetry("a365", "westus", 503);
-    recordThrottle("a365", "westus", 429);
+    recordFailure(A365_ENDPOINT_CATEGORY, "westus", 400);
+    recordFailure(A365_ENDPOINT_CATEGORY, "westus", 400);
+    recordFailure(A365_ENDPOINT_CATEGORY, "westus", 404);
+    recordRetry(A365_ENDPOINT_CATEGORY, "westus", 503);
+    recordThrottle(A365_ENDPOINT_CATEGORY, "westus", 429);
 
     const failures = drain(REQUEST_FAILURE_NAME);
     expect(failures.size).toBe(2);
@@ -58,30 +64,30 @@ describe("sdkstats/networkStats", () => {
     expect(failures.get([...failures.keys()].find((k) => k[2] === "404")!)).toBe(1);
 
     const retries = drain(RETRY_COUNT_NAME);
-    expect([...retries.entries()]).toEqual([[["a365", "westus", "503"], 1]]);
+    expect([...retries.entries()]).toEqual([[[A365_ENDPOINT_CATEGORY, "westus", "503"], 1]]);
 
     const throttles = drain(THROTTLE_COUNT_NAME);
-    expect([...throttles.entries()]).toEqual([[["a365", "westus", "429"], 1]]);
+    expect([...throttles.entries()]).toEqual([[[A365_ENDPOINT_CATEGORY, "westus", "429"], 1]]);
   });
 
   it("records exception counts keyed by (endpoint, host, exceptionType)", () => {
-    recordException("otlp", "collector", "Timeout exception");
-    recordException("otlp", "collector", "Timeout exception");
-    recordException("otlp", "collector", "Network exception");
+    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
+    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
+    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_NETWORK);
 
     const exceptions = drain(EXCEPTION_COUNT_NAME);
     expect(exceptions.size).toBe(2);
     const entries = [...exceptions.entries()].sort(([a], [b]) => a[2].localeCompare(b[2]));
     expect(entries).toEqual([
-      [["otlp", "collector", "Network exception"], 1],
-      [["otlp", "collector", "Timeout exception"], 2],
+      [[OTLP_ENDPOINT_CATEGORY, "collector", EXC_NETWORK], 1],
+      [[OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT], 2],
     ]);
   });
 
   it("recordDuration averages recorded durations per (endpoint, host) on drain", () => {
-    recordDuration("a365", "westus", 100);
-    recordDuration("a365", "westus", 300);
-    recordDuration("a365", "eastus", 50);
+    recordDuration(A365_ENDPOINT_CATEGORY, "westus", 100);
+    recordDuration(A365_ENDPOINT_CATEGORY, "westus", 300);
+    recordDuration(A365_ENDPOINT_CATEGORY, "eastus", 50);
 
     const durations = drain(REQUEST_DURATION_NAME);
     expect(durations.size).toBe(2);
@@ -94,9 +100,9 @@ describe("sdkstats/networkStats", () => {
   });
 
   it("recordDuration ignores negative or non-finite values", () => {
-    recordDuration("a365", "westus", -1);
-    recordDuration("a365", "westus", NaN);
-    recordDuration("a365", "westus", Infinity);
+    recordDuration(A365_ENDPOINT_CATEGORY, "westus", -1);
+    recordDuration(A365_ENDPOINT_CATEGORY, "westus", NaN);
+    recordDuration(A365_ENDPOINT_CATEGORY, "westus", Infinity);
     expect(drain(REQUEST_DURATION_NAME).size).toBe(0);
   });
 
@@ -131,27 +137,27 @@ describe("sdkstats/networkStats", () => {
   });
 
   it("accumulates success counts per (endpoint, host) and reports keys as two-element tuples", () => {
-    recordSuccess("otlp", "a.example.com");
-    recordSuccess("otlp", "a.example.com");
-    recordSuccess("otlp", "b.example.com");
+    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(OTLP_ENDPOINT_CATEGORY, "b.example.com");
     const snap = drain(REQUEST_SUCCESS_NAME);
     expect(snap.size).toBe(2);
 
     const entries = Array.from(snap.entries()).sort(([a], [b]) => a[1].localeCompare(b[1]));
-    expect(entries[0][0]).toEqual(["otlp", "a.example.com"]);
+    expect(entries[0][0]).toEqual([OTLP_ENDPOINT_CATEGORY, "a.example.com"]);
     expect(entries[0][1]).toBe(2);
-    expect(entries[1][0]).toEqual(["otlp", "b.example.com"]);
+    expect(entries[1][0]).toEqual([OTLP_ENDPOINT_CATEGORY, "b.example.com"]);
     expect(entries[1][1]).toBe(1);
   });
 
   it("drain() empties the bucket atomically — second drain returns an empty map", () => {
-    recordSuccess("otlp", "a.example.com");
+    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(1);
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
   });
 
   it("_resetAllForTest() clears every bucket", () => {
-    recordSuccess("otlp", "a.example.com");
+    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
     _resetAllForTest();
     for (const name of NETWORK_METRIC_NAMES) {
       expect(drain(name).size).toBe(0);

@@ -19,6 +19,7 @@ import {
   recordSuccess,
   recordThrottle,
 } from "../../../../src/sdkstats/networkStats.js";
+import { A365_ENDPOINT_CATEGORY, EXC_TIMEOUT } from "../../../../src/sdkstats/constants.js";
 import {
   FEATURE_TYPE_FEATURE,
   FEATURE_TYPE_INSTRUMENTATION,
@@ -175,7 +176,7 @@ describe("sdkstats/metrics", () => {
       setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
       // Drop a network counter so a request_success_count observation will fire.
       _resetNetworkStatsForTest();
-      recordSuccess("a365", "contoso.example.com");
+      recordSuccess(A365_ENDPOINT_CATEGORY, "contoso.example.com");
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -205,8 +206,8 @@ describe("sdkstats/metrics", () => {
   describe("network gauges (default mode)", () => {
     it("emits one observation per drained key, attaches endpoint + host, and clears after collection", async () => {
       _resetNetworkStatsForTest();
-      recordSuccess("a365", "a365.example.com");
-      recordSuccess("a365", "a365.example.com");
+      recordSuccess(A365_ENDPOINT_CATEGORY, "a365.example.com");
+      recordSuccess(A365_ENDPOINT_CATEGORY, "a365.example.com");
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -229,7 +230,7 @@ describe("sdkstats/metrics", () => {
       const success = byName(REQUEST_SUCCESS_NAME);
       expect(success).toHaveLength(1);
       expect(success[0].value).toBe(2);
-      expect(success[0].attributes.endpoint).toBe("a365");
+      expect(success[0].attributes.endpoint).toBe(A365_ENDPOINT_CATEGORY);
       expect(success[0].attributes.host).toBe("a365.example.com");
       expect(success[0].attributes.statusCode).toBeUndefined();
 
@@ -247,12 +248,12 @@ describe("sdkstats/metrics", () => {
 
     it("emits failure/retry/throttle/exception observations with the appropriate dimension and an avg duration", async () => {
       _resetNetworkStatsForTest();
-      recordFailure("a365", "westus", 404);
-      recordRetry("a365", "westus", 503);
-      recordThrottle("a365", "westus", 439);
-      recordException("a365", "westus", "Timeout exception");
-      recordDuration("a365", "westus", 100);
-      recordDuration("a365", "westus", 200);
+      recordFailure(A365_ENDPOINT_CATEGORY, "westus", 404);
+      recordRetry(A365_ENDPOINT_CATEGORY, "westus", 503);
+      recordThrottle(A365_ENDPOINT_CATEGORY, "westus", 439);
+      recordException(A365_ENDPOINT_CATEGORY, "westus", EXC_TIMEOUT);
+      recordDuration(A365_ENDPOINT_CATEGORY, "westus", 100);
+      recordDuration(A365_ENDPOINT_CATEGORY, "westus", 200);
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -283,12 +284,12 @@ describe("sdkstats/metrics", () => {
       expect(throttles[0].attributes.statusCode).toBe("439");
 
       const exceptions = byName(EXCEPTION_COUNT_NAME);
-      expect(exceptions[0].attributes.exceptionType).toBe("Timeout exception");
+      expect(exceptions[0].attributes.exceptionType).toBe(EXC_TIMEOUT);
 
       const durations = byName(REQUEST_DURATION_NAME);
       expect(durations).toHaveLength(1);
       expect(durations[0].value).toBe(150);
-      expect(durations[0].attributes.endpoint).toBe("a365");
+      expect(durations[0].attributes.endpoint).toBe(A365_ENDPOINT_CATEGORY);
       expect(durations[0].attributes.host).toBe("westus");
       // Duration has no statusCode / exceptionType dimension.
       expect(durations[0].attributes.statusCode).toBeUndefined();
