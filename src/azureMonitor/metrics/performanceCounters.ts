@@ -70,7 +70,7 @@ export class PerformanceCounterMetrics {
 
   /**
    * Creates performance counter instruments.
-   * @param options - Distro configuration.
+   * @param options - Microsoft OpenTelemetry configuration.
    * @param config - Application Insights configuration.
    */
   constructor(config: InternalConfig, options?: { collectionInterval: number }) {

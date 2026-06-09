@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Azure Monitor–specific initialization that runs alongside the distro.
+ * Azure Monitor–specific initialization that runs alongside the main setup.
  * SDK Stats, Browser SDK Loader, and Live Metrics SDK prefix are
- * Azure Monitor concerns — not part of the generic OTel distro lifecycle.
+ * Azure Monitor concerns — not part of the generic OTel lifecycle.
  */
 
 import type { InternalConfig } from "../shared/config.js";

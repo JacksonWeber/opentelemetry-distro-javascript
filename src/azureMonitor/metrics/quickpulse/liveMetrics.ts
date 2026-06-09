@@ -144,7 +144,7 @@ export class LiveMetrics {
   > = new Map();
   /**
    * Initializes a new instance of the StandardMetrics class.
-   * @param config - Distro configuration.
+   * @param config - Microsoft OpenTelemetry configuration.
    * @param options - Standard Metrics options.
    */
   constructor(config: InternalConfig) {

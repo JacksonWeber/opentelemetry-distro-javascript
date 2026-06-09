@@ -57,7 +57,7 @@ export interface MicrosoftOpenTelemetryOptions {
  *
  * These options control Azure Monitor-specific behavior. Global options
  * (resource, sampling, instrumentations, processors) are defined at the
- * distro level in {@link MicrosoftOpenTelemetryOptions}.
+ * top level in {@link MicrosoftOpenTelemetryOptions}.
  */
 export interface AzureMonitorOpenTelemetryOptions {
   /** Enable or disable Azure Monitor export (Default true) */

@@ -291,7 +291,7 @@ function demonstrateContextPropagation(): void {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Initialize the distro with A365 export enabled (same as a365Export.ts)
+  // Initialize Microsoft OpenTelemetry with A365 export enabled (same as a365Export.ts)
   useMicrosoftOpenTelemetry({
     azureMonitor: {
       azureMonitorExporterOptions: {

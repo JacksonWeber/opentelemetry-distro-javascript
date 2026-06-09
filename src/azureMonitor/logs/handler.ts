@@ -25,7 +25,7 @@ export class LogHandler {
 
   /**
    * Initializes a new instance of the TraceHandler class.
-   * @param _config - Distro configuration.
+   * @param _config - Microsoft OpenTelemetry configuration.
    * @param _metricHandler - MetricHandler.
    */
   constructor(config: InternalConfig, metricHandler: MetricHandler) {

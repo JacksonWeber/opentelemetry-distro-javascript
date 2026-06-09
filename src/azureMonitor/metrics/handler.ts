@@ -78,7 +78,7 @@ export class MetricHandler {
 
   /**
    * Initializes a new instance of the MetricHandler class.
-   * @param config - Distro configuration.
+   * @param config - Microsoft OpenTelemetry configuration.
    * @param options - Metric Handler options.
    */
   constructor(config: InternalConfig) {

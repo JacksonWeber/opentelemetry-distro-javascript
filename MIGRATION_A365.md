@@ -1,6 +1,6 @@
 # Migrating from `@microsoft/agents-a365-observability` to `@microsoft/opentelemetry`
 
-Migration guide for existing Agent365 observability customers moving to the production-ready distro.
+Migration guide for existing Agent365 observability customers moving to the production-ready `@microsoft/opentelemetry` package.
 
 For A365 documentation (scopes, baggage, scenarios), see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
 
@@ -15,7 +15,7 @@ Reference docs: https://learn.microsoft.com/en-us/microsoft-agent-365/developer/
 | `npm install @microsoft/agents-a365-observability` | `npm install @microsoft/opentelemetry` |
 | `import { ... } from "@microsoft/agents-a365-observability"` | `import { ... } from "@microsoft/opentelemetry"` |
 
-If you used hosting helpers, extension packages, or the runtime package, remove them and use the single distro package:
+If you used hosting helpers, extension packages, or the runtime package, remove them and use the single `@microsoft/opentelemetry` package:
 
 | Before | After |
 |---|---|
@@ -62,7 +62,7 @@ await shutdownMicrosoftOpenTelemetry();
 
 ## 3) Resource configuration (service identity)
 
-The Agent365 Observability SDK used `ObservabilityManager.configure(builder => builder.withService('name', 'version'))` to set the service name and version. In the distro, use the standard OpenTelemetry `resource` option:
+The Agent365 Observability SDK used `ObservabilityManager.configure(builder => builder.withService('name', 'version'))` to set the service name and version. In `@microsoft/opentelemetry`, use the standard OpenTelemetry `resource` option:
 
 ```typescript
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
@@ -97,7 +97,7 @@ Without explicit configuration, the service name defaults to `unknown_service:<p
 
 ## 4) Auto-instrumentation behavior change
 
-The distro auto-discovers and instruments supported GenAI frameworks (OpenAI Agents SDK, LangChain) without explicit `instrumentor.enable()` calls. This is a key difference from the Agent365 Observability SDK.
+`@microsoft/opentelemetry` auto-discovers and instruments supported GenAI frameworks (OpenAI Agents SDK, LangChain) without explicit `instrumentor.enable()` calls. This is a key difference from the Agent365 Observability SDK.
 
 **What is auto-instrumented by default:**
 
@@ -110,9 +110,9 @@ The distro auto-discovers and instruments supported GenAI frameworks (OpenAI Age
 
 **Key differences from the Agent365 Observability SDK:**
 
-- The Agent365 Observability SDK required explicit `instrumentor.enable()` calls (e.g., `new OpenAIAgentsTraceInstrumentor(...).enable()`). The distro handles this automatically.
+- The Agent365 Observability SDK required explicit `instrumentor.enable()` calls (e.g., `new OpenAIAgentsTraceInstrumentor(...).enable()`). This is now handled automatically.
 - When A365 is enabled without Azure Monitor, non-GenAI instrumentations (HTTP, databases, etc.) are disabled by default to keep telemetry GenAI-focused.
-- **Warning:** If your migrated code still calls `instrumentor.enable()` alongside the distro's auto-instrumentation, you may get duplicate spans. Remove explicit `instrumentor.enable()` calls after migration.
+- **Warning:** If your migrated code still calls `instrumentor.enable()` alongside the bundled auto-instrumentation, you may get duplicate spans. Remove explicit `instrumentor.enable()` calls after migration.
 
 **To disable a specific auto-instrumentation:**
 
@@ -157,7 +157,7 @@ useMicrosoftOpenTelemetry({
 
 New built-in token cache for per-agent-per-tenant token acquisition and refresh.
 
-**Migrating from `withTokenResolver()`:** The Agent365 Observability SDK's `builder.withTokenResolver()` pattern maps directly to the `tokenResolver` option in the distro. The distro does **not** auto-register a built-in cache — you must always provide a `tokenResolver`. If you want built-in caching, use `AgenticTokenCacheInstance` as shown below.
+**Migrating from `withTokenResolver()`:** The Agent365 Observability SDK's `builder.withTokenResolver()` pattern maps directly to the `tokenResolver` option in `@microsoft/opentelemetry`. The package does **not** auto-register a built-in cache — you must always provide a `tokenResolver`. If you want built-in caching, use `AgenticTokenCacheInstance` as shown below.
 
 ### Using the shared singleton
 
@@ -168,7 +168,7 @@ import {
 } from "@microsoft/opentelemetry";
 
 // Use the built-in AgenticTokenCacheInstance as the token resolver.
-// No custom TokenCache class needed — the distro provides it out of the box.
+// No custom TokenCache class needed — provided out of the box.
 const otelTokenResolver = async (agentId: string, tenantId: string): Promise<string> => {
   const token = AgenticTokenCacheInstance.getObservabilityToken(agentId, tenantId) ?? '';
   return token;
@@ -190,7 +190,7 @@ If you previously used `withTokenResolver()` with custom logic, pass your resolv
 // Before (Agent365 Observability SDK)
 builder.withTokenResolver((agentId, tenantId) => myCustomTokenLogic(agentId, tenantId));
 
-// After (distro) — same resolver, new location
+// After (`@microsoft/opentelemetry`) — same resolver, new location
 useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
@@ -250,7 +250,7 @@ baggage.run(() => {
 
 The Agent365 Observability SDK's `withExporterOptions()` pattern is replaced by flat properties on the `a365` options object.
 
-| Agent365 Observability SDK (`Agent365ExporterOptions`) | Distro equivalent |
+| Agent365 Observability SDK (`Agent365ExporterOptions`) | `@microsoft/opentelemetry` equivalent |
 |---|---|
 | `maxQueueSize` | `a365.maxQueueSize` (default: `2048`) |
 | `scheduledDelayMilliseconds` | `a365.scheduledDelayMilliseconds` (default: `5000`) |
@@ -265,7 +265,7 @@ const exporterOptions = new Agent365ExporterOptions();
 exporterOptions.maxQueueSize = 10;
 builder.withExporterOptions(exporterOptions);
 
-// After (distro) — flat on a365 options
+// After (`@microsoft/opentelemetry`) — flat on a365 options
 useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
@@ -471,7 +471,7 @@ Your tenant must have one of the following licenses assigned in [Microsoft 365 a
 
 ### Duplicate spans after migration
 
-If your migrated code still calls `instrumentor.enable()` (e.g., `OpenAIAgentsTraceInstrumentor.enable()`) alongside the distro, you will get duplicate spans. Remove explicit instrumentor calls — the distro handles auto-instrumentation automatically.
+If your migrated code still calls `instrumentor.enable()` (e.g., `OpenAIAgentsTraceInstrumentor.enable()`) alongside `@microsoft/opentelemetry`, you will get duplicate spans. Remove explicit instrumentor calls — auto-instrumentation is handled automatically.
 
 ### Validating locally
 
@@ -541,7 +541,7 @@ For the full troubleshooting guide, see the [official troubleshooting documentat
 - [ ] Set `service.name` and `service.version` via `resource` option or `OTEL_RESOURCE_ATTRIBUTES`
 
 **Auto-instrumentation:**
-- [ ] Remove explicit `instrumentor.enable()` calls (the distro auto-instruments)
+- [ ] Remove explicit `instrumentor.enable()` calls (auto-instrumented automatically)
 - [ ] Review which instrumentations are enabled by default in A365 mode (GenAI only)
 - [ ] Re-enable non-GenAI instrumentations if needed via `instrumentationOptions`
 
@@ -568,7 +568,7 @@ For the full troubleshooting guide, see the [official troubleshooting documentat
 - [ ] Verify tenant license (Microsoft 365 E7 or Microsoft Agent 365 Frontier)
 
 **Logging:**
-- [ ] Set `OTEL_LOG_LEVEL` for distro diagnostics
+- [ ] Set `OTEL_LOG_LEVEL` for SDK diagnostics
 - [ ] Optionally set `AZURE_LOG_LEVEL` for Azure SDK alignment
 
 **Verification:**

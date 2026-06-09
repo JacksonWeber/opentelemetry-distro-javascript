@@ -9,7 +9,8 @@ Your Node.js app doesn't connect to Fabric directly. Instead, it sends telemetry
 ```
 ┌──────────────┐     OTLP/HTTP     ┌──────────────────┐     Kusto Ingest    ┌─────────────────────────┐
 │  Node.js App │ ───────────────►  │  OTel Collector  │ ──────────────────► │  Fabric / Azure Data    │
-│  (distro)    │    :4318          │  (ADX exporter)  │                     │  Explorer               │
+│  (microsoft- │                   │                  │                     │                         │
+│opentelemetry)│    :4318          │  (ADX exporter)  │                     │  Explorer               │
 └──────────────┘                   └──────────────────┘                     └─────────────────────────┘
 ```
 
@@ -61,9 +62,9 @@ The collector needs permission to write data into your database. Run one of thes
 
 > Replace `<yourdbname>` with your actual database name, and `<ApplicationID>` with the client ID from your [Entra app registration](https://learn.microsoft.com/en-us/azure/data-explorer/provision-entra-id-app?tabs=portal).
 
-## Step 3: Create a Node.js app with the distro
+## Step 3: Create a Node.js app with `@microsoft/opentelemetry`
 
-Create a new Node.js app and install the distro:
+Create a new Node.js app and install `@microsoft/opentelemetry`:
 
 ```bash
 mkdir fabric-demo && cd fabric-demo
@@ -82,7 +83,7 @@ useMicrosoftOpenTelemetry();
 const app = express();
 
 app.get("/", (_req, res) => {
-  res.send("Hello from distro → Fabric!");
+  res.send("Hello from microsoft-opentelemetry → Fabric!");
 });
 
 app.listen(3000, () => {

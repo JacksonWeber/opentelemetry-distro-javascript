@@ -65,7 +65,7 @@ export interface A365Options {
    *
    * Equivalent to the `A365_OBSERVABILITY_SCOPES_OVERRIDE` environment
    * variable; when supplied, it becomes the sole entry of the resolved
-   * {@link authScopes} array. Mirrors the Python distro's
+   * {@link authScopes} array. Mirrors the Python package's
    * `a365_observability_scope_override` kwarg
    * (microsoft/opentelemetry-distro-python#87).
    *

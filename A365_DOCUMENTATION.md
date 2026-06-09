@@ -1,4 +1,4 @@
-# Agent 365 Observability — Microsoft OpenTelemetry Distro for Node.js
+# Agent 365 Observability — Microsoft OpenTelemetry for Node.js
 
 Short guide for A365-specific APIs in this package.
 

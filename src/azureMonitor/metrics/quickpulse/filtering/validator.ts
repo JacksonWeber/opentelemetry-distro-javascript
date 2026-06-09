@@ -49,7 +49,7 @@ export class Validator {
   public validateTelemetryType(telemetryType: string): void {
     if (telemetryType === "PerformanceCounter") {
       throw new TelemetryTypeError(
-        "The telemetry type PerformanceCounter was specified, but this distro does not send performance counters to quickpulse.",
+        "The telemetry type PerformanceCounter was specified, but this SDK does not send performance counters to quickpulse.",
       );
     } else if (telemetryType === "Event") {
       throw new TelemetryTypeError(
@@ -57,7 +57,7 @@ export class Validator {
       );
     } else if (telemetryType === "Metric") {
       throw new TelemetryTypeError(
-        "The telemetry type Metric was specified, but this distro does not send custom live metrics to quickpulse.",
+        "The telemetry type Metric was specified, but this SDK does not send custom live metrics to quickpulse.",
       );
     } else if (!validTelemetryTypes.has(telemetryType)) {
       throw new TelemetryTypeError(`'${telemetryType}' is not a valid telemetry type.`);
