@@ -23,7 +23,7 @@
  * `Exception_Count` with a bounded set of `exceptionType` labels.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_otlp_wrapper.py` from
- * the Python distro (microsoft/opentelemetry-distro-python#144).
+ * the Python implementation (microsoft/opentelemetry-distro-python#144).
  */
 
 import type { ExportResult } from "@opentelemetry/core";

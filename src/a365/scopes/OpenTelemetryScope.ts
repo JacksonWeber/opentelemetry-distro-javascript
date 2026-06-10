@@ -34,7 +34,7 @@ export abstract class OpenTelemetryScope {
   /**
    * Returns a tracer from the current global TracerProvider.
    *
-   * This **must not** be stored in a static field because the distro's
+   * This **must not** be stored in a static field because
    * `useMicrosoftOpenTelemetry()` resets the global API state
    * (`trace.disable()` + global-object deletion) before starting the
    * NodeSDK. A static field would capture a `ProxyTracer` bound to the

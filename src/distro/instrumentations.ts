@@ -3,8 +3,8 @@
 
 /**
  * Standalone helpers that create OTel instrumentations, samplers, and metric
- * views.  These are used by the distro regardless of whether Azure Monitor is
- * enabled, so they must not depend on Azure Monitor handler classes.
+ * views.  These are used regardless of whether Azure Monitor is enabled, so
+ * they must not depend on Azure Monitor handler classes.
  */
 
 import type { RequestOptions } from "node:http";
@@ -33,7 +33,7 @@ import { logLevelToSeverityNumber } from "../azureMonitor/utils/logUtils.js";
 // ── Instrumentations ────────────────────────────────────────────────
 
 /**
- * Build the list of auto-instrumentations based on the distro configuration.
+ * Build the list of auto-instrumentations based on the resolved configuration.
  * This covers trace instrumentations (HTTP, Azure SDK, DB clients) and log
  * instrumentations (Bunyan, Winston).
  *
@@ -117,7 +117,7 @@ export function createInstrumentations(
 // ── Sampler ─────────────────────────────────────────────────────────
 
 /**
- * Create an OTel sampler based on the distro configuration.
+ * Create an OTel sampler based on the resolved configuration.
  *
  * Precedence:
  * 1. Explicit sampler provided via environment config (e.g. OTEL_TRACES_SAMPLER)

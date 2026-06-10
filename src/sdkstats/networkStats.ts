@@ -12,7 +12,7 @@
  * interval.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_utils.py` from the Python
- * distro.
+ * implementation.
  */
 
 // Wire-format metric names and the set of HTTP status-code buckets used

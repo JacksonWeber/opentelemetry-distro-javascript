@@ -9,7 +9,7 @@
  * caller-supplied `MeterProvider`.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_metrics.py` from the
- * Python distro.
+ * Python implementation.
  */
 
 import os from "node:os";
@@ -197,7 +197,7 @@ export class SdkStatsMetrics {
 
     // Feature / instrumentation bitmask gauges are skipped when running
     // alongside the Azure Monitor exporter's own SDKStats — that pipeline
-    // already emits them (with our distro bits bridged in via
+    // already emits them (with our feature bits bridged in via
     // `_bridge_sdkstats_to_azure_monitor`) and would collide with these.
     // These gauges are registered on the long-interval MeterProvider.
     if (!networkOnly && longMeterProvider) {

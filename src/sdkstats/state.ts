@@ -7,21 +7,21 @@
  * Feature and instrumentation flags are stored as bitmasks so they can be
  * combined and reported efficiently. The bitmask values are intentionally
  * compatible with the Azure Monitor Exporter SDKStats encoding so that
- * Azure Monitor consumers see no behavioural change when the distro
- * bridges its bits into the exporter's existing pipeline.
+ * Azure Monitor consumers see no behavioural change when our bits are
+ * bridged into the exporter's existing pipeline.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_state.py` from the
- * Python distro (microsoft/opentelemetry-distro-python#89).
+ * Python implementation (microsoft/opentelemetry-distro-python#89).
  */
 
 import { SdkStatsFeature, SdkStatsInstrumentation } from "../types.js";
 
 /**
- * Distro-specific feature flags, in addition to the
+ * Microsoft OpenTelemetry specific feature flags, in addition to the
  * {@link SdkStatsFeature} flags shared with the Azure Monitor exporter.
  *
  * These bit values intentionally start above the values used by
- * {@link SdkStatsFeature} so that distro bits and exporter bits can be
+ * {@link SdkStatsFeature} so that the bits and exporter bits can be
  * OR-combined into a single 64-bit mask without collision.
  */
 export enum SdkStatsDistroFeature {
@@ -68,7 +68,7 @@ export function isSdkStatsEnabled(): boolean {
 
 // ---------------------------------------------------------------------------
 // Mutable global state — kept module-local to ensure a single source of truth
-// across the distro process. Node.js executes JS in a single thread (modulo
+// across the process. Node.js executes JS in a single thread (modulo
 // worker_threads), so no explicit locking is needed.
 // ---------------------------------------------------------------------------
 

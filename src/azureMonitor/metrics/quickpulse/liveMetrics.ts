@@ -143,9 +143,8 @@ export class LiveMetrics {
     Map<string, FilterConjunctionGroupInfo[]>
   > = new Map();
   /**
-   * Initializes a new instance of the StandardMetrics class.
-   * @param config - Distro configuration.
-   * @param options - Standard Metrics options.
+   * Initializes a new instance of the LiveMetrics class.
+   * @param config - Microsoft OpenTelemetry configuration.
    */
   constructor(config: InternalConfig) {
     this.config = config;

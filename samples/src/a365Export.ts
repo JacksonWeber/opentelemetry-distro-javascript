@@ -68,7 +68,7 @@ async function myTokenResolver(agentId: string, tenantId: string): Promise<strin
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Step 2 — Initialize the distro with A365 export
+// Step 2 — Initialize Microsoft OpenTelemetry with A365 export
 // ────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {

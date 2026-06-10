@@ -133,9 +133,9 @@ export function _applyA365InstrumentationDefaults(
 }
 
 /**
- * Initialize Microsoft OpenTelemetry distribution.
+ * Initialize Microsoft OpenTelemetry.
  *
- * This is the primary entry point for the distro. It sets up OpenTelemetry
+ * This is the primary entry point. It sets up OpenTelemetry
  * providers and instrumentations, then attaches the configured exporters:
  * - Azure Monitor (when `options.azureMonitor` is provided or the
  *   `APPLICATIONINSIGHTS_CONNECTION_STRING` env var is set; explicitly disable
@@ -167,7 +167,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     (!!options?.azureMonitor || hasAzureMonitorConnectionString(config));
   const azureMonitorEnabled = azureMonitorRequested && validateAzureMonitorConfig(config);
 
-  // ── SDKStats: record distro feature bits for ALL paths ──────────────────
+  // ── SDKStats: record feature bits for ALL paths ─────────────────────────
   // These bits are emitted via SDKStats regardless of which exporter is
   // active. When Azure Monitor is enabled the exporter package's own
   // SDKStats pipeline picks them up via `AZURE_MONITOR_STATSBEAT_FEATURES`;
@@ -400,7 +400,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // - When Azure Monitor is enabled (`networkOnly: true`): only the
   //   network gauges are registered. The Feature / Feature.instrumentations
   //   long-interval metrics are owned by the AzMon exporter, with our
-  //   distro bits bridged in via `setSdkStatsFeatures` →
+  //   feature bits bridged in via `setSdkStatsFeatures` →
   //   `AZURE_MONITOR_STATSBEAT_FEATURES`. The network pipeline is safe to
   //   coexist because the (endpoint, host) attributes partition the
   //   time series (AzMon ingestion hosts vs A365 / OTLP hosts).
