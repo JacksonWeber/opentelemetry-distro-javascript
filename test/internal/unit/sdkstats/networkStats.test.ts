@@ -26,7 +26,7 @@ import {
   A365_ENDPOINT_CATEGORY,
   EXC_NETWORK,
   EXC_TIMEOUT,
-  } from "../../../../src/sdkstats/constants.js";
+} from "../../../../src/sdkstats/constants.js";
 
 describe("sdkstats/networkStats", () => {
   beforeEach(() => {
