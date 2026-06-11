@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * ESM loader entry point for Microsoft OpenTelemetry distro.
+ * ESM loader entry point for Microsoft OpenTelemetry.
  *
  * For ESM applications, this loader should be preloaded with the --import flag
  * so OpenTelemetry import hooks are registered before application modules load.

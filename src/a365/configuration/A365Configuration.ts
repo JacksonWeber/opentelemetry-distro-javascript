@@ -146,7 +146,7 @@ export class A365Configuration {
     // ENABLE_A365_OBSERVABILITY_EXPORTER controls just the HTTP exporter, not
     // the master `enabled` toggle. It is a secondary toggle that only takes
     // effect when A365 is configured in code (options provided), matching the
-    // Python distro behavior (see microsoft/opentelemetry-distro-python#87).
+    // Python package behavior (see microsoft/opentelemetry-distro-python#87).
     const envExporter = parseEnvBoolean(process.env[A365_ENV_VARS.EXPORTER_ENABLED]);
     if (
       envExporter !== undefined &&
@@ -163,7 +163,7 @@ export class A365Configuration {
 
     // observabilityScopeOverride wins over authScopes / env var so callers can
     // narrow the resolved scope set to a single explicit value (mirrors the
-    // Python distro's a365_observability_scope_override kwarg).
+    // Python package's a365_observability_scope_override kwarg).
     const scopeOverride = options?.observabilityScopeOverride?.trim();
     if (scopeOverride) {
       authScopes = [scopeOverride];

@@ -67,7 +67,7 @@ export class InternalConfig {
 
   /**
    * Initializes a new instance of InternalConfig.
-   * Accepts MicrosoftOpenTelemetryOptions (distro-level) — global options come
+   * Accepts MicrosoftOpenTelemetryOptions (top-level) — global options come
    * from the top level, Azure Monitor-specific options from the azureMonitor key.
    */
   constructor(options?: MicrosoftOpenTelemetryOptions) {

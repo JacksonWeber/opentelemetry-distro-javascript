@@ -7,15 +7,15 @@
  * pipeline.
  *
  * When the full Azure Monitor pipeline is enabled, the exporter package's
- * own SDKStats machinery handles SDKStats emission and the distro just
- * publishes its bits via the `AZURE_MONITOR_STATSBEAT_FEATURES` env var
+ * own SDKStats machinery handles SDKStats emission and we just
+ * publish our bits via the `AZURE_MONITOR_STATSBEAT_FEATURES` env var
  * for the exporter to read. For A365-only, OTLP-only, or Console-only
  * customers this manager spins up a standalone `MeterProvider` →
  * `AzureMonitorStatsbeatExporter` pipeline so feature/instrumentation
  * SDKStats are still collected.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_manager.py` from the
- * Python distro.
+ * Python implementation.
  */
 
 import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
@@ -47,7 +47,7 @@ const SDKSTATS_LONG_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_LONG_EXPORT
 /**
  * Default short export interval (15 minutes) for network SDKStats
  * counters. Matches the Application Insights SDKStats short-interval
- * cadence used by the Python distro (`_get_stats_short_export_interval()`
+ * cadence used by the Python package (`_get_stats_short_export_interval()`
  * in `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
  *
  * @internal
@@ -56,7 +56,7 @@ const DEFAULT_SHORT_EXPORT_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
  * Override env var: short (network) export interval in seconds.
- * Matches the Python distro env var name.
+ * Matches the Python package env var name.
  *
  * @internal
  */
@@ -67,7 +67,7 @@ const SDKSTATS_SHORT_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_SHORT_EXPO
  * Insights connection string. When unset, SDKStats flow to the
  * Microsoft-owned SDKStats resource (`NON_EU_CONNECTION_STRING` in
  * the AzMon exporter package). Primarily useful for testing.
- * Matches the Python distro env var name.
+ * Matches the Python package env var name.
  *
  * @internal
  */
@@ -151,7 +151,7 @@ export class SdkStatsManager {
       const NON_EU_CONNECTION_STRING = sdkStatsTypesModule.NON_EU_CONNECTION_STRING;
 
       // Allow overriding the SDKStats ingestion target via env var,
-      // matching the Python distro's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING
+      // matching the Python package's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING
       // hook. Primarily useful for testing — production should leave
       // this unset so SDKStats flows to the Microsoft-owned SDKStats
       // resource (NON_EU_CONNECTION_STRING).
