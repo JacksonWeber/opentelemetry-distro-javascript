@@ -59,8 +59,17 @@ export function getInstanceProviders(id: string): InstanceProviders | undefined 
   return registry.get(id);
 }
 
-/** Bind `id` as the ambient current instance for the duration of `fn`. */
+/**
+ * Bind `id` as the ambient current instance for the duration of `fn`.
+ *
+ * If `id` is not a registered instance (e.g. an unknown or stale id, or one
+ * used after `shutdown()`), the binding is skipped so resolution falls back to
+ * the default instance rather than silently producing no-op telemetry.
+ */
 export function withInstance<T>(id: string, fn: () => T): T {
+  if (!registry.has(id)) {
+    return fn();
+  }
   return context.with(context.active().setValue(CURRENT_INSTANCE_KEY, id), fn);
 }
 

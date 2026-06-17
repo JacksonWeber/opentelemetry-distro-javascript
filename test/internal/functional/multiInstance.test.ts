@@ -3,6 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as opentelemetry from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
 import type { HttpClient, PipelineRequest } from "@azure/core-rest-pipeline";
 
 import {
@@ -74,8 +75,13 @@ describe("Multiple SDK instances in one runtime", () => {
     instanceB = undefined;
     _resetRegistry();
     _resetGlobalSetup();
+    // Disable every global the multi-instance setup installs (trace, metrics,
+    // logs, and the AsyncLocalStorage context manager) so state does not leak
+    // into other tests sharing this Vitest worker.
     opentelemetry.trace.disable();
     opentelemetry.metrics.disable();
+    opentelemetry.context.disable();
+    logs.disable();
   });
 
   it("routes each instance's telemetry only to its own Azure Monitor resource", async () => {

@@ -178,7 +178,9 @@ class MicrosoftOpenTelemetryInstanceImpl implements MicrosoftOpenTelemetryInstan
     }
     unregisterInstance(this.id);
     this.shutdownPromise = (async () => {
-      await Promise.allSettled(this.disposers.map((d) => d()));
+      // Wrap each disposer so a synchronous throw is captured and does not
+      // abort the rest of shutdown.
+      await Promise.allSettled(this.disposers.map((d) => Promise.resolve().then(d)));
       await Promise.allSettled([
         this.tracerProvider.shutdown(),
         this.meterProvider.shutdown(),
