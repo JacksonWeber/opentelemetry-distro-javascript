@@ -9,7 +9,7 @@ import { getA365Logger } from "../logging.js";
 import type { TurnContextLike } from "./types.js";
 
 /** Max setTimeout delay (2^31 - 1 ms); larger values overflow and fire immediately. */
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
 /**
  * Minimal authorization shape required by AgenticTokenCache.
