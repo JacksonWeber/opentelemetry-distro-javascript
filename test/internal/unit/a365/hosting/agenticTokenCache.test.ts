@@ -341,4 +341,53 @@ describe("AgenticTokenCache", () => {
   it("makeKey produces agent:tenant format", () => {
     expect(AgenticTokenCache.makeKey("agent1", "tenant1")).toBe("agent1:tenant1");
   });
+
+  // ── Timeout guard (hung STS / auth) ──────────────────────────────────────
+
+  it("times out a hung exchangeToken and retries then succeeds", async () => {
+    const timeoutCache = new AgenticTokenCache({ exchangeTimeoutMs: 20 });
+    const jwt = makeJwtWithExp(Math.floor(Date.now() / 1000) + 3600);
+    let call = 0;
+    const auth: AuthorizationLike = {
+      exchangeToken: vi.fn(() => {
+        call++;
+        // First attempt never settles (simulates unresponsive STS).
+        return call === 1 ? new Promise(() => {}) : Promise.resolve({ token: jwt });
+      }),
+    };
+
+    await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+    expect(auth.exchangeToken).toHaveBeenCalledTimes(2);
+    expect(timeoutCache.getObservabilityToken("a", "t")).toBe(jwt);
+  });
+
+  it("does not hang indefinitely when exchangeToken never settles", async () => {
+    const timeoutCache = new AgenticTokenCache({ exchangeTimeoutMs: 10 });
+    const auth: AuthorizationLike = {
+      exchangeToken: vi.fn(() => new Promise(() => {})),
+    };
+
+    await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+    // 1 initial attempt + 2 retries, all timing out.
+    expect(auth.exchangeToken).toHaveBeenCalledTimes(3);
+    expect(timeoutCache.getObservabilityToken("a", "t")).toBeNull();
+  });
+
+  it("waits without timing out when timeout is disabled (0)", async () => {
+    const timeoutCache = new AgenticTokenCache({ exchangeTimeoutMs: 0 });
+    const jwt = makeJwtWithExp(Math.floor(Date.now() / 1000) + 3600);
+    const auth: AuthorizationLike = {
+      exchangeToken: vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 40));
+        return { token: jwt };
+      }),
+    };
+
+    await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+    expect(auth.exchangeToken).toHaveBeenCalledTimes(1);
+    expect(timeoutCache.getObservabilityToken("a", "t")).toBe(jwt);
+  });
 });
