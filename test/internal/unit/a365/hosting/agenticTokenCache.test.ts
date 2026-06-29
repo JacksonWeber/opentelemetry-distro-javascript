@@ -390,4 +390,49 @@ describe("AgenticTokenCache", () => {
     expect(auth.exchangeToken).toHaveBeenCalledTimes(1);
     expect(timeoutCache.getObservabilityToken("a", "t")).toBe(jwt);
   });
+
+  it("does not disable the guard when the env var is set but blank", async () => {
+    const prev = process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS;
+    process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS = "  ";
+    try {
+      // Blank env var must fall through to the option (not parse to 0/disabled).
+      const timeoutCache = new AgenticTokenCache({ exchangeTimeoutMs: 10 });
+      const auth: AuthorizationLike = {
+        exchangeToken: vi.fn(() => new Promise(() => {})),
+      };
+
+      await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+      expect(auth.exchangeToken).toHaveBeenCalledTimes(3);
+      expect(timeoutCache.getObservabilityToken("a", "t")).toBeNull();
+    } finally {
+      if (prev === undefined) {
+        delete process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS;
+      } else {
+        process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS = prev;
+      }
+    }
+  });
+
+  it("reads the timeout from the env var when set", async () => {
+    const prev = process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS;
+    process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS = "10";
+    try {
+      const timeoutCache = new AgenticTokenCache();
+      const auth: AuthorizationLike = {
+        exchangeToken: vi.fn(() => new Promise(() => {})),
+      };
+
+      await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+      expect(auth.exchangeToken).toHaveBeenCalledTimes(3);
+      expect(timeoutCache.getObservabilityToken("a", "t")).toBeNull();
+    } finally {
+      if (prev === undefined) {
+        delete process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS;
+      } else {
+        process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS = prev;
+      }
+    }
+  });
 });

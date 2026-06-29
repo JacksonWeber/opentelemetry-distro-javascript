@@ -71,7 +71,9 @@ export class AgenticTokenCache {
     }
 
     // A non-positive timeout disables the guard (waits indefinitely).
-    const envTimeout = Number(process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS?.trim());
+    // A blank/unset env var falls through to the option/default.
+    const rawTimeout = process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS?.trim();
+    const envTimeout = rawTimeout ? Number(rawTimeout) : NaN;
     this._exchangeTimeoutMs = Number.isFinite(envTimeout)
       ? envTimeout
       : (options?.exchangeTimeoutMs ?? this._defaultExchangeTimeoutMs);
