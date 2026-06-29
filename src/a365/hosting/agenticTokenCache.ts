@@ -8,6 +8,9 @@
 import { getA365Logger } from "../logging.js";
 import type { TurnContextLike } from "./types.js";
 
+/** Max setTimeout delay (2^31 - 1 ms); larger values overflow and fire immediately. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 /**
  * Minimal authorization shape required by AgenticTokenCache.
  *
@@ -280,13 +283,13 @@ export class AgenticTokenCache {
     if (!(this._exchangeTimeoutMs > 0)) {
       return exchange;
     }
+    // setTimeout delays overflow a 32-bit signed int and fire immediately; clamp.
+    const delayMs = Math.min(this._exchangeTimeoutMs, MAX_TIMER_DELAY_MS);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(
-          new Error(`[AgenticTokenCache] exchangeToken timeout after ${this._exchangeTimeoutMs}ms`),
-        );
-      }, this._exchangeTimeoutMs);
+        reject(new Error(`[AgenticTokenCache] exchangeToken timeout after ${delayMs}ms`));
+      }, delayMs);
     });
     try {
       return await Promise.race([exchange, timeout]);

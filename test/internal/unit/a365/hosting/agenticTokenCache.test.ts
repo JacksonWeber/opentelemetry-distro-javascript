@@ -414,6 +414,24 @@ describe("AgenticTokenCache", () => {
     }
   });
 
+  it("clamps an oversized timeout so it does not fire immediately", async () => {
+    // A delay above 2^31-1 overflows setTimeout and would fire ~immediately
+    // without clamping; with clamping the (slow) exchange still wins the race.
+    const timeoutCache = new AgenticTokenCache({ exchangeTimeoutMs: 2_147_483_648 * 4 });
+    const jwt = makeJwtWithExp(Math.floor(Date.now() / 1000) + 3600);
+    const auth: AuthorizationLike = {
+      exchangeToken: vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+        return { token: jwt };
+      }),
+    };
+
+    await timeoutCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
+
+    expect(auth.exchangeToken).toHaveBeenCalledTimes(1);
+    expect(timeoutCache.getObservabilityToken("a", "t")).toBe(jwt);
+  });
+
   it("reads the timeout from the env var when set", async () => {
     const prev = process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS;
     process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS = "10";
