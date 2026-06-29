@@ -282,9 +282,7 @@ export class AgenticTokenCache {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         reject(
-          new Error(
-            `[AgenticTokenCache] exchangeToken timeout after ${this._exchangeTimeoutMs}ms`,
-          ),
+          new Error(`[AgenticTokenCache] exchangeToken timeout after ${this._exchangeTimeoutMs}ms`),
         );
       }, this._exchangeTimeoutMs);
     });
