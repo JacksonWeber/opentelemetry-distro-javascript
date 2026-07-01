@@ -15,6 +15,7 @@ import {
   ParentMeterProvider,
   ParentTracerProvider,
 } from "./delegatingProviders.js";
+import { patchOpenTelemetryInstrumentationEnable } from "../../utils/opentelemetryInstrumentationPatcher.js";
 
 let globalSetupDone = false;
 
@@ -39,6 +40,11 @@ export function ensureGlobalSetup(): void {
   logs.disable();
   const globalOpentelemetryApiKey = Symbol.for("opentelemetry.js.api.1");
   delete (globalThis as Record<symbol, unknown>)[globalOpentelemetryApiKey];
+
+  // Track per-instance instrumentation registration in the SDKStats env var,
+  // matching the single-instance distro path. Patched once because it wraps the
+  // OTel autoLoader's enableInstrumentations.
+  patchOpenTelemetryInstrumentationEnable();
 
   const contextManager = new AsyncLocalStorageContextManager();
   contextManager.enable();

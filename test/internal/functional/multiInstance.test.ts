@@ -4,7 +4,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as opentelemetry from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import type { HttpClient, PipelineRequest } from "@azure/core-rest-pipeline";
+
+// Wrap registerInstrumentations so the test can observe how each instance binds
+// its own instrumentation set to its own providers, while still performing the
+// real registration.
+vi.mock("@opentelemetry/instrumentation", async (importActual) => {
+  const actual = await importActual<typeof import("@opentelemetry/instrumentation")>();
+  return { ...actual, registerInstrumentations: vi.fn(actual.registerInstrumentations) };
+});
 
 import {
   createMicrosoftOpenTelemetryInstance,
@@ -48,12 +57,14 @@ function spanNames(envelopes: Envelope[]): string[] {
 function makeInstance(
   connectionString: string,
   httpClient: HttpClient,
+  instrumentationOptions?: Record<string, unknown>,
 ): MicrosoftOpenTelemetryInstance {
   return createMicrosoftOpenTelemetryInstance({
     // Use the deterministic ratio sampler (always-on) instead of the default
     // rate limiter so the test is reliable.
     tracesPerSecond: 0,
     samplingRatio: 1,
+    ...(instrumentationOptions ? { instrumentationOptions: instrumentationOptions as never } : {}),
     // Keep only the span pipeline active so the test is deterministic and offline.
     azureMonitor: {
       enableLiveMetrics: false,
@@ -134,5 +145,50 @@ describe("Multiple SDK instances in one runtime", () => {
     expect(spanNames(ingestA)).not.toContain("global-into-b");
     expect(spanNames(ingestB)).toContain("global-into-b");
     expect(spanNames(ingestB)).not.toContain("global-into-a");
+  });
+
+  it("binds a different instrumentation set per exporter", async () => {
+    const mockRegister = vi.mocked(registerInstrumentations);
+    mockRegister.mockClear();
+
+    const ingestA: Envelope[] = [];
+    const ingestB: Envelope[] = [];
+
+    // Instance A enables the HTTP instrumentation; instance B disables it. This
+    // models the prioritized scenario: a customer registers different
+    // OpenTelemetry instrumentations for the Azure Monitor exporter than for the
+    // second (A365/OTLP) exporter, in the same runtime.
+    instanceA = makeInstance(CONNECTION_STRING_A, recordingHttpClient(ingestA), {
+      http: { enabled: true },
+    });
+    instanceB = makeInstance(CONNECTION_STRING_B, recordingHttpClient(ingestB), {
+      http: { enabled: false },
+    });
+
+    // Each instance registered its own instrumentation set against its own
+    // providers.
+    const registrations = mockRegister.mock.calls.map((args) => ({
+      names: (args[0].instrumentations ?? [])
+        .flat()
+        .map((i) => (i as { instrumentationName: string }).instrumentationName),
+      tracerProvider: args[0].tracerProvider,
+    }));
+    expect(registrations.length).toBe(2);
+
+    const HTTP = "@opentelemetry/instrumentation-http";
+    const withHttp = registrations.filter((r) => r.names.includes(HTTP));
+    const withoutHttp = registrations.filter((r) => !r.names.includes(HTTP));
+
+    // Exactly one instance (A) bound the HTTP instrumentation; the other (B)
+    // did not — different instrumentation sets per exporter.
+    expect(withHttp.length).toBe(1);
+    expect(withoutHttp.length).toBe(1);
+
+    // The two instances bound their instrumentations to distinct tracer
+    // providers, so each instrumentation's telemetry reaches only its own
+    // exporter.
+    expect(registrations[0].tracerProvider).toBeDefined();
+    expect(registrations[1].tracerProvider).toBeDefined();
+    expect(registrations[0].tracerProvider).not.toBe(registrations[1].tracerProvider);
   });
 });

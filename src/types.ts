@@ -59,7 +59,11 @@ export interface MicrosoftOpenTelemetryOptions {
  *
  * Multiple instances can be created in the same Node.js runtime via
  * {@link createMicrosoftOpenTelemetryInstance}. Each instance owns its own
- * exporter pipeline (resource, sampler, processors, readers). Telemetry created
+ * exporter pipeline (resource, sampler, processors, readers) **and its own set
+ * of OpenTelemetry instrumentations**, bound to that instance's providers. This
+ * lets a customer register different instrumentations and settings for the
+ * Azure Monitor exporter than for the A365 exporter in the same process — each
+ * instrumentation emits only to its instance's exporter. Telemetry created
  * through this handle — or within {@link MicrosoftOpenTelemetryInstance.runWithInstance} —
  * is routed only to this instance's pipeline.
  */

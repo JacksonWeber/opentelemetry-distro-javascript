@@ -53,7 +53,11 @@ import {
   SdkStatsFeature,
 } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
+import { _applyA365InstrumentationDefaults } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
+
+// Re-export to preserve the existing import path used by tests/consumers.
+export { _applyA365InstrumentationDefaults };
 
 process.env["AZURE_MONITOR_DISTRO_VERSION"] = AZURE_MONITOR_OPENTELEMETRY_VERSION;
 process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION;
@@ -61,76 +65,6 @@ process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION
 let sdk: NodeSDK;
 let disposeAzureMonitor: (() => void) | undefined;
 let isShutdown = false;
-
-const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof InstrumentationOptions> = [
-  "http",
-  "azureSdk",
-  "mongoDb",
-  "mySql",
-  "postgreSql",
-  "redis",
-  "redis4",
-  "bunyan",
-  "winston",
-];
-
-/**
- * Redis and redis4 share the same underlying instrumentation. If a caller
- * explicitly configures either key, treat both as explicitly configured so
- * the other is not inadvertently disabled.
- */
-const REDIS_LINKED_KEYS: ReadonlyArray<keyof InstrumentationOptions> = ["redis", "redis4"];
-
-/**
- * When A365 export is enabled, default to GenAI-focused telemetry by disabling
- * non-GenAI instrumentations unless callers explicitly configure them.
- *
- * @internal
- */
-export function _applyA365InstrumentationDefaults(
-  instrumentationOptions: InstrumentationOptions,
-  userInstrumentationOptions: unknown,
-  a365Enabled: boolean,
-): void {
-  if (!a365Enabled) {
-    return;
-  }
-
-  const userOptionsRecord =
-    userInstrumentationOptions && typeof userInstrumentationOptions === "object"
-      ? (userInstrumentationOptions as Record<string, unknown>)
-      : undefined;
-
-  // Pre-compute whether any Redis-linked key was explicitly configured so
-  // that configuring `redis4` alone does not inadvertently disable `redis`
-  // (and vice-versa), which would break the underlying shared instrumentation.
-  const redisLinkedExplicit =
-    !!userOptionsRecord &&
-    REDIS_LINKED_KEYS.some((k) => Object.prototype.hasOwnProperty.call(userOptionsRecord, k));
-
-  for (const instrumentationKey of A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT) {
-    const isExplicitlyConfigured =
-      !!userOptionsRecord &&
-      Object.prototype.hasOwnProperty.call(userOptionsRecord, instrumentationKey);
-
-    // Treat redis/redis4 as a linked pair: if either was set by the caller,
-    // skip disabling both keys.
-    if (
-      isExplicitlyConfigured ||
-      (redisLinkedExplicit &&
-        REDIS_LINKED_KEYS.includes(instrumentationKey as (typeof REDIS_LINKED_KEYS)[number]))
-    ) {
-      continue;
-    }
-
-    const currentValue = instrumentationOptions[instrumentationKey];
-    if (currentValue && typeof currentValue === "object") {
-      (currentValue as Record<string, unknown>).enabled = false;
-    } else {
-      instrumentationOptions[instrumentationKey] = { enabled: false };
-    }
-  }
-}
 
 /**
  * Initialize Microsoft OpenTelemetry.

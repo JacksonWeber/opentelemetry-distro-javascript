@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Support multiple isolated SDK instances, each with its own instrumentations, settings, and exporter (e.g. different instrumentations for Azure Monitor vs. A365)
+
 ## [1.1.0] - 2026-05-29
 
 ### Features Added
