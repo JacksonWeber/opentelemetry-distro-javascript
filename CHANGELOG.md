@@ -1,5 +1,10 @@
 # Release History
 
+## [Unreleased]
+
+### Other Changes
+- Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
+
 ## [1.2.0] - 2026-07-02
 
 ### Bugs Fixed
