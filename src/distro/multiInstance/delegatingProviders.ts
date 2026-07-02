@@ -83,7 +83,65 @@ export class ParentTracerProvider implements TracerProvider {
   }
 }
 
-/** A Meter that resolves the current instance's meter on every instrument call. */
+/**
+ * Base for synchronous instruments (counter / up-down-counter / histogram /
+ * gauge). It re-resolves the current instance's `Meter` on every measurement so
+ * `.add()` / `.record()` route by the ambient context at call time — not by the
+ * instance that happened to be current when the instrument was created. The
+ * concrete instrument is created once per resolved `Meter` and cached.
+ */
+class DelegatingSyncInstrument<T> {
+  private readonly perMeter = new WeakMap<Meter, T>();
+  constructor(
+    private readonly resolveMeter: () => Meter,
+    private readonly create: (meter: Meter) => T,
+  ) {}
+
+  protected target(): T {
+    const meter = this.resolveMeter();
+    let instrument = this.perMeter.get(meter);
+    if (!instrument) {
+      instrument = this.create(meter);
+      this.perMeter.set(meter, instrument);
+    }
+    return instrument;
+  }
+}
+
+class DelegatingCounter extends DelegatingSyncInstrument<Counter> implements Counter {
+  add(...args: Parameters<Counter["add"]>): void {
+    this.target().add(...args);
+  }
+}
+class DelegatingUpDownCounter
+  extends DelegatingSyncInstrument<UpDownCounter>
+  implements UpDownCounter
+{
+  add(...args: Parameters<UpDownCounter["add"]>): void {
+    this.target().add(...args);
+  }
+}
+class DelegatingHistogram extends DelegatingSyncInstrument<Histogram> implements Histogram {
+  record(...args: Parameters<Histogram["record"]>): void {
+    this.target().record(...args);
+  }
+}
+class DelegatingGauge extends DelegatingSyncInstrument<Gauge> implements Gauge {
+  record(...args: Parameters<Gauge["record"]>): void {
+    this.target().record(...args);
+  }
+}
+
+/**
+ * A Meter that routes measurements to the current instance.
+ *
+ * Synchronous instruments re-resolve the instance on every `.add()`/`.record()`
+ * so they follow the ambient context. Observable instruments and batch
+ * callbacks are collected asynchronously by a provider's reader, outside any
+ * `runWithInstance` scope, so they cannot be ambient-routed — they bind to the
+ * instance current at creation/registration time (the default when none is
+ * active).
+ */
 class DelegatingMeter implements Meter {
   constructor(
     private readonly name: string,
@@ -98,16 +156,28 @@ class DelegatingMeter implements Meter {
   }
 
   createGauge(name: string, options?: MetricOptions): Gauge {
-    return this.delegate().createGauge(name, options);
+    return new DelegatingGauge(
+      () => this.delegate(),
+      (meter) => meter.createGauge(name, options),
+    );
   }
   createHistogram(name: string, options?: MetricOptions): Histogram {
-    return this.delegate().createHistogram(name, options);
+    return new DelegatingHistogram(
+      () => this.delegate(),
+      (meter) => meter.createHistogram(name, options),
+    );
   }
   createCounter(name: string, options?: MetricOptions): Counter {
-    return this.delegate().createCounter(name, options);
+    return new DelegatingCounter(
+      () => this.delegate(),
+      (meter) => meter.createCounter(name, options),
+    );
   }
   createUpDownCounter(name: string, options?: MetricOptions): UpDownCounter {
-    return this.delegate().createUpDownCounter(name, options);
+    return new DelegatingUpDownCounter(
+      () => this.delegate(),
+      (meter) => meter.createUpDownCounter(name, options),
+    );
   }
   createObservableGauge(name: string, options?: MetricOptions): ObservableGauge {
     return this.delegate().createObservableGauge(name, options);
