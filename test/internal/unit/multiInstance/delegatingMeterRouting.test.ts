@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Counter, Meter, MeterProvider } from "@opentelemetry/api";
 import { context } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
@@ -38,16 +38,25 @@ function recordingProviders(instance: string, sink: Add[]): InstanceProviders {
 }
 
 describe("DelegatingMeter metric routing", () => {
+  let cm: AsyncLocalStorageContextManager;
+
   beforeAll(() => {
     // withInstance relies on the async context, so a real context manager must
     // be active for the ambient instance id to propagate.
-    const cm = new AsyncLocalStorageContextManager();
+    cm = new AsyncLocalStorageContextManager();
     cm.enable();
     context.setGlobalContextManager(cm);
   });
 
   afterEach(() => {
     _resetRegistry();
+  });
+
+  afterAll(() => {
+    // Restore global context state so it does not leak into other tests sharing
+    // this Vitest worker.
+    cm.disable();
+    context.disable();
   });
 
   it("routes each .add() to the ambient instance, not the one current at creation", () => {

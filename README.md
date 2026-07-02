@@ -115,6 +115,65 @@ useMicrosoftOpenTelemetry();
 
 That's it — traces, metrics, and logs are collected automatically with built-in instrumentations for HTTP, databases, and more.
 
+### Multiple instances
+
+`useMicrosoftOpenTelemetry()` configures a single, global SDK. If you need several **isolated** SDKs in one process — for example one exporting to Azure Monitor and another to A365, each with its own instrumentations and sampling — use `createMicrosoftOpenTelemetryInstance()` instead. It accepts the same `MicrosoftOpenTelemetryOptions` and returns a handle:
+
+```typescript
+import { createMicrosoftOpenTelemetryInstance } from "@microsoft/opentelemetry";
+
+// Instance A -> Azure Monitor, HTTP instrumentation on
+const azmon = createMicrosoftOpenTelemetryInstance({
+  azureMonitor: {
+    azureMonitorExporterOptions: {
+      connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
+    },
+  },
+  instrumentationOptions: { http: { enabled: true } },
+  samplingRatio: 1.0,
+});
+
+// Instance B -> A365, HTTP instrumentation off, different sampling
+const a365 = createMicrosoftOpenTelemetryInstance({
+  a365: { enabled: true, tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId) },
+  instrumentationOptions: { http: { enabled: false } },
+  samplingRatio: 0.25,
+});
+```
+
+Each instance owns its own exporter, instrumentation set, and sampler; telemetry from one never reaches another.
+
+#### Routing telemetry to an instance
+
+You do **not** manage OpenTelemetry context yourself. There are two automatic paths and one opt-in path:
+
+1. **Use the handle** — `instance.getTracer(name)`, `instance.getMeter(name)`, and `instance.getLogger(name)` are bound to that instance's pipeline. No context work.
+2. **Instrumentations auto-route** — instrumentations you enable on an instance are bound to it at creation, so their telemetry always flows to that instance automatically.
+3. **`runWithInstance(fn)`** — only needed when code uses the *global* OpenTelemetry API (e.g. `trace.getTracer(...)` from `@opentelemetry/api`), such as a shared library or a globally-registered third-party instrumentation. Wrap it to choose the target instance:
+
+```typescript
+import { trace } from "@opentelemetry/api";
+
+// Global-API code has no handle; steer it to a chosen instance.
+azmon.runWithInstance(() => trace.getTracer("shared-lib").startSpan("work").end());
+```
+
+The first instance created is the default target for global-API code that isn't wrapped; pass `{ makeDefault: true }` as the second argument to override. The standalone `runWithMicrosoftOpenTelemetryInstance(instance.id, fn)` function is equivalent to the `runWithInstance` method.
+
+> **Metrics note:** synchronous instruments (counter, histogram, etc.) route per measurement, so `.add()`/`.record()` follow the ambient instance. Observable instruments are collected asynchronously outside any `runWithInstance` scope, so they bind to the instance current when the observable was created — create them via that instance's `getMeter(...)` or inside `runWithInstance`.
+
+#### Instance handle
+
+| Member                        | Description                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `id`                          | Stable identifier for this instance.                                          |
+| `getTracer(name, version?)`   | Tracer bound to this instance's pipeline.                                     |
+| `getMeter(name, version?)`    | Meter bound to this instance's pipeline.                                      |
+| `getLogger(name, version?)`   | Logger bound to this instance's pipeline.                                     |
+| `runWithInstance(fn)`         | Run `fn` with this instance bound as the ambient target for the global API.   |
+| `forceFlush()`                | Flush this instance's pipeline.                                               |
+| `shutdown()`                  | Shut down and detach only this instance, leaving other instances active.      |
+
 ## Configuration
 
 ### `MicrosoftOpenTelemetryOptions`
