@@ -1,6 +1,15 @@
 # Release History
 
-## [Unreleased]
+## [1.2.0] - 2026-07-02
+
+### Bugs Fixed
+- A365: forward `a365.maxQueueSize`, `a365.scheduledDelayMilliseconds`, `a365.maxExportBatchSize`, and `a365.exporterTimeoutMilliseconds` to the `BatchSpanProcessor` that wraps the `Agent365Exporter`.
+- A365: add a configurable timeout to agentic token exchange so an unresponsive STS no longer hangs telemetry exports indefinitely
+
+### Other Changes
+- Raise minimum supported Node.js version to 22, aligning with OpenTelemetry and Azure SDK support policies
+- Bump `@azure/monitor-opentelemetry-exporter` floor to `1.0.0-beta.43`
+- Bump `@opentelemetry/*` core/SDK packages to `2.8.0` / `0.219.0`
 
 ### Features Added
 - Support multiple isolated SDK instances, each with its own instrumentations, settings, and exporter (e.g. different instrumentations for Azure Monitor vs. A365)

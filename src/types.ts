@@ -13,7 +13,7 @@ import type { A365Options } from "./a365/index.js";
 /**
  * Microsoft OpenTelemetry distribution version.
  */
-export const MICROSOFT_OPENTELEMETRY_VERSION = "1.1.0";
+export const MICROSOFT_OPENTELEMETRY_VERSION = "1.2.0";
 
 /**
  * Microsoft OpenTelemetry Options
@@ -269,7 +269,7 @@ export interface BrowserSdkLoaderOptions {
   connectionString?: string;
 }
 
-export const AZURE_MONITOR_OPENTELEMETRY_VERSION = "1.16.0";
+export const AZURE_MONITOR_OPENTELEMETRY_VERSION = "1.18.2";
 export const AZURE_MONITOR_STATSBEAT_FEATURES = "AZURE_MONITOR_STATSBEAT_FEATURES";
 export const AZURE_MONITOR_PREFIX = "AZURE_MONITOR_PREFIX";
 export const AZURE_MONITOR_AUTO_ATTACH = "AZURE_MONITOR_AUTO_ATTACH";

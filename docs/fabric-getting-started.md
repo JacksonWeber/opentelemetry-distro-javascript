@@ -22,7 +22,7 @@ Your Node.js app doesn't connect to Fabric directly. Instead, it sends telemetry
 
 ## Prerequisites
 
-- [Node.js 18+](https://nodejs.org/) (20.6.0+ recommended for ESM support)
+- [Node.js 22+](https://nodejs.org/)
 - An Azure Data Explorer cluster **or** a [Fabric KQL database](https://learn.microsoft.com/en-us/fabric/real-time-analytics/create-database) — a [free ADX cluster](https://dataexplorer.azure.com/freecluster) works for testing
 - Azure CLI installed and logged in (`az login`) — used for authentication
 - The `@microsoft/opentelemetry` npm package (installed in Step 3)

@@ -23,7 +23,7 @@ import type {
 } from "@opentelemetry/api";
 import { createNoopMeter, ProxyTracerProvider } from "@opentelemetry/api";
 import type { Logger, LoggerProvider, LoggerOptions, LogRecord } from "@opentelemetry/api-logs";
-import { NOOP_LOGGER } from "@opentelemetry/api-logs";
+import { createNoopLogger } from "@opentelemetry/api-logs";
 
 import { resolveInstanceProviders } from "./instanceRegistry.js";
 
@@ -31,6 +31,7 @@ import { resolveInstanceProviders } from "./instanceRegistry.js";
 // no-ops so that early or out-of-band global API access never throws.
 const NOOP_TRACER_PROVIDER = new ProxyTracerProvider();
 const NOOP_METER = createNoopMeter();
+const NOOP_LOGGER = createNoopLogger();
 
 /**
  * A Tracer that resolves the current instance's tracer on every call. Resolution
