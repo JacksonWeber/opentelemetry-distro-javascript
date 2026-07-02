@@ -14,7 +14,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Development Setup
 
-1. Install [Node.js](https://nodejs.org/) 18 or later.
+1. Install [Node.js](https://nodejs.org/) 22 or later.
 2. Install dependencies.
 3. Run formatting, linting, and tests before opening a pull request.
 
