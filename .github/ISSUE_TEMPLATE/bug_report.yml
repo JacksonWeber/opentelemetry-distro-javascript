@@ -56,7 +56,7 @@ body:
       description: Provide details about your environment.
       placeholder: |
         - OS: [e.g., Windows 11, Ubuntu 22.04]
-        - Node.js version: [e.g., 20.x]
+        - Node.js version: [e.g., 22.x]
         - Package version: [e.g., 1.2.3]
         - Runtime: [e.g., Azure Functions, Express, standalone]
     validations:
