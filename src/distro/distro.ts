@@ -21,7 +21,6 @@ import { MetricHandler } from "../azureMonitor/metrics/index.js";
 import { TraceHandler } from "../azureMonitor/traces/handler.js";
 import { LogHandler } from "../azureMonitor/logs/index.js";
 import { ConnectionStringParser } from "../azureMonitor/utils/connectionStringParser.js";
-import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
 import { patchOpenTelemetryInstrumentationEnable } from "../utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
 import { getInstance as getSdkStatsInstance } from "../utils/sdkStats.js";
@@ -55,7 +54,6 @@ import {
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
 
-process.env["AZURE_MONITOR_DISTRO_VERSION"] = AZURE_MONITOR_OPENTELEMETRY_VERSION;
 process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION;
 
 let sdk: NodeSDK;
