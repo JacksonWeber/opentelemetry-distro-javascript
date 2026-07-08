@@ -66,7 +66,7 @@ export function getAzureMonitorSdkStatsFeatures(config: InternalConfig): SdkStat
   return {
     browserSdkLoader: config.browserSdkLoaderOptions.enabled,
     aadHandling: !!config.azureMonitorExporterOptions?.credential,
-    diskRetry: !config.azureMonitorExporterOptions?.disableOfflineStorage,
+    disableDiskRetry: !!config.azureMonitorExporterOptions?.disableOfflineStorage,
     aksResourceDetectorPopulation: aksResourceDetected,
   };
 }

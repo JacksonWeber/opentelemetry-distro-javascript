@@ -294,9 +294,9 @@ export class LiveMetrics {
     if (this.meterProvider) {
       return;
     }
-    // Turn on live metrics active collection for SDK Stats
+    // Live metrics is now being accessed, so clear the "disabled" opt-out flag for SDK Stats.
     if (!this.sdkStatsOptionsUpdated) {
-      getInstance().setSdkStatsFeatures({}, { liveMetrics: true });
+      getInstance().setSdkStatsFeatures({}, { disableLiveMetrics: false });
       this.sdkStatsOptionsUpdated = true;
     }
     this.totalDependencyCount = 0;

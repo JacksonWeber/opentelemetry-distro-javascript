@@ -66,7 +66,7 @@ describe("SdkStatsConfiguration — a365 and otlp feature flags", () => {
   it("should preserve existing feature bits when adding a365/otlp", () => {
     // Seed the env var with an existing feature bitmap
     process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(
-      SdkStatsFeature.AAD_HANDLING | SdkStatsFeature.DISK_RETRY,
+      SdkStatsFeature.AAD_HANDLING | SdkStatsFeature.DISABLE_DISK_RETRY,
     );
 
     const sb = getInstance();
@@ -75,7 +75,7 @@ describe("SdkStatsConfiguration — a365 and otlp feature flags", () => {
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
     expect(features & SdkStatsFeature.AAD_HANDLING).toBeTruthy();
-    expect(features & SdkStatsFeature.DISK_RETRY).toBeTruthy();
+    expect(features & SdkStatsFeature.DISABLE_DISK_RETRY).toBeTruthy();
     expect(features & SdkStatsFeature.A365).toBeTruthy();
     expect(features & SdkStatsFeature.OTLP).toBeTruthy();
   });
@@ -84,7 +84,7 @@ describe("SdkStatsConfiguration — a365 and otlp feature flags", () => {
     // Seed the env var with JSON format (as written by a previous setSdkStatsFeatures call)
     process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify({
       instrumentation: 0,
-      feature: SdkStatsFeature.AAD_HANDLING | SdkStatsFeature.DISK_RETRY,
+      feature: SdkStatsFeature.AAD_HANDLING | SdkStatsFeature.DISABLE_DISK_RETRY,
     });
 
     const sb = getInstance();
@@ -93,7 +93,7 @@ describe("SdkStatsConfiguration — a365 and otlp feature flags", () => {
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
     expect(features & SdkStatsFeature.AAD_HANDLING).toBeTruthy();
-    expect(features & SdkStatsFeature.DISK_RETRY).toBeTruthy();
+    expect(features & SdkStatsFeature.DISABLE_DISK_RETRY).toBeTruthy();
     expect(features & SdkStatsFeature.A365).toBeTruthy();
   });
 

@@ -139,11 +139,11 @@ export interface LangChainInstrumentationConfig extends InstrumentationConfig {}
  * @internal
  */
 export interface SdkStatsFeatures {
-  diskRetry?: boolean;
+  disableDiskRetry?: boolean;
   aadHandling?: boolean;
   browserSdkLoader?: boolean;
   distro?: boolean;
-  liveMetrics?: boolean;
+  disableLiveMetrics?: boolean;
   shim?: boolean;
   customerSdkStats?: boolean;
   multiIkey?: boolean;
@@ -157,11 +157,11 @@ export interface SdkStatsFeatures {
  * @internal
  */
 export const SdkStatsFeaturesMap = new Map<string, number>([
-  ["diskRetry", 1],
+  ["disableDiskRetry", 1],
   ["aadHandling", 2],
   ["browserSdkLoader", 4],
   ["distro", 8],
-  ["liveMetrics", 16],
+  ["disableLiveMetrics", 16],
   ["shim", 32],
   ["customerSdkStats", 64],
   ["multiIkey", 128],
@@ -175,12 +175,13 @@ export const SdkStatsFeaturesMap = new Map<string, number>([
  * @internal
  */
 export interface SdkStatsInstrumentations {
-  /** Azure Monitor Supported Instrumentations */
-  azureSdk?: boolean;
-  mongoDb?: boolean;
-  mySql?: boolean;
-  postgreSql?: boolean;
-  redis?: boolean;
+  /** Azure Monitor Supported Instrumentations. These are on-by-default, so the
+   * flag is set only when the customer disables the instrumentation. */
+  disableAzureSdk?: boolean;
+  disableMongoDb?: boolean;
+  disableMySql?: boolean;
+  disablePostgreSql?: boolean;
+  disableRedis?: boolean;
   bunyan?: boolean;
   winston?: boolean;
   /** OpenTelemetry Community Instrumentations */
@@ -274,11 +275,11 @@ export const APPLICATIONINSIGHTS_SDKSTATS_DISABLED = "APPLICATIONINSIGHTS_SDKSTA
 
 export enum SdkStatsFeature {
   NONE = 0,
-  DISK_RETRY = 1,
+  DISABLE_DISK_RETRY = 1,
   AAD_HANDLING = 2,
   BROWSER_SDK_LOADER = 4,
   DISTRO = 8,
-  LIVE_METRICS = 16,
+  DISABLE_LIVE_METRICS = 16,
   SHIM = 32,
   CUSTOMER_SDKSTATS = 64,
   MULTI_IKEY = 128,
@@ -290,11 +291,11 @@ export enum SdkStatsFeature {
 export enum SdkStatsInstrumentation {
   /** Azure Monitor Supported Instrumentations */
   NONE = 0,
-  AZURE_CORE_TRACING = 1,
-  MONGODB = 2,
-  MYSQL = 4,
-  REDIS = 8,
-  POSTGRES = 16,
+  DISABLE_AZURE_SDK = 1,
+  DISABLE_MONGODB = 2,
+  DISABLE_MYSQL = 4,
+  DISABLE_POSTGRESQL = 8,
+  DISABLE_REDIS = 16,
   BUNYAN = 32,
   WINSTON = 64,
   /** OpenTelemetry Supported Instrumentations */

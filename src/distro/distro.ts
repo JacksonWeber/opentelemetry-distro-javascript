@@ -190,11 +190,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── SDK Stats (feature & instrumentation tracking for all paths) ──
   const sdkStatsInstrumentations: SdkStatsInstrumentations = {
-    azureSdk: config.instrumentationOptions?.azureSdk?.enabled,
-    mongoDb: config.instrumentationOptions?.mongoDb?.enabled,
-    mySql: config.instrumentationOptions?.mySql?.enabled,
-    postgreSql: config.instrumentationOptions?.postgreSql?.enabled,
-    redis: config.instrumentationOptions?.redis?.enabled,
+    // On-by-default instrumentations: the flag is set only when the customer
+    // disables the instrumentation. Order must match the Kusto bit map.
+    disableAzureSdk: config.instrumentationOptions?.azureSdk?.enabled === false,
+    disableMongoDb: config.instrumentationOptions?.mongoDb?.enabled === false,
+    disableMySql: config.instrumentationOptions?.mySql?.enabled === false,
+    disablePostgreSql: config.instrumentationOptions?.postgreSql?.enabled === false,
+    disableRedis: config.instrumentationOptions?.redis?.enabled === false,
     bunyan: config.instrumentationOptions?.bunyan?.enabled,
     winston: config.instrumentationOptions?.winston?.enabled,
   };
@@ -204,12 +206,16 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       : {
           browserSdkLoader: false,
           aadHandling: false,
-          diskRetry: false,
+          disableDiskRetry: false,
           aksResourceDetectorPopulation: false,
         }),
     a365: a365Config.enabled,
     otlp: otlpActive,
     customerSdkStats: process.env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED]?.toLowerCase() === "true",
+    // Live metrics counts as "enabled" only when actually accessed (a live metrics
+    // session is established). At init it has not been accessed, so it starts as
+    // disabled; activateMetrics() clears this flag when a session connects.
+    disableLiveMetrics: true,
   };
   getSdkStatsInstance().setSdkStatsFeatures(sdkStatsInstrumentations, sdkStatsFeatures);
 

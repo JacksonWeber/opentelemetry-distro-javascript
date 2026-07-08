@@ -113,10 +113,6 @@ class SdkStatsConfiguration {
       this.currentSdkStatsFeatures.distro = true;
     }
 
-    if (sdkStatsFeatures.liveMetrics) {
-      this.currentSdkStatsFeatures.liveMetrics = true;
-    }
-
     const featureArray: Array<SdkStatsOption> = Object.entries(this.currentSdkStatsFeatures).map(
       (entry) => {
         return { option: entry[0], value: entry[1] };
@@ -148,7 +144,13 @@ class SdkStatsConfiguration {
       }
       process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify({
         instrumentation: instrumentationBitMap,
-        feature: featureBitMap,
+        feature:
+          // disableLiveMetrics is authoritative from the current process: live
+          // metrics counts as enabled once accessed, so the bit is cleared even
+          // if a previously-persisted env-var value still had it set.
+          this.currentSdkStatsFeatures.disableLiveMetrics === false
+            ? featureBitMap & ~SdkStatsFeature.DISABLE_LIVE_METRICS
+            : featureBitMap,
       });
     } catch (_error) {
       // Fail silently — SDK Stats is best-effort

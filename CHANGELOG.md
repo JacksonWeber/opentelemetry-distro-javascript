@@ -4,6 +4,7 @@
 
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
+- SDKStats now tracks on-by-default features/instrumentations (disk retry, live metrics, Azure SDK, MongoDB, MySQL, PostgreSQL, Redis) as opt-out flags that are set only when the customer disables them.
 
 ## [1.2.0] - 2026-07-02
 

@@ -41,19 +41,19 @@ describe("getAzureMonitorSdkStatsFeatures", () => {
     expect(features.aadHandling).toBe(false);
   });
 
-  it("should return diskRetry true when disableOfflineStorage is falsy", () => {
+  it("should return disableDiskRetry false when disableOfflineStorage is falsy", () => {
     const config = new InternalConfig();
 
     const features = getAzureMonitorSdkStatsFeatures(config);
-    expect(features.diskRetry).toBe(true);
+    expect(features.disableDiskRetry).toBe(false);
   });
 
-  it("should return diskRetry false when disableOfflineStorage is true", () => {
+  it("should return disableDiskRetry true when disableOfflineStorage is true", () => {
     const config = new InternalConfig();
     config.azureMonitorExporterOptions.disableOfflineStorage = true;
 
     const features = getAzureMonitorSdkStatsFeatures(config);
-    expect(features.diskRetry).toBe(false);
+    expect(features.disableDiskRetry).toBe(true);
   });
 
   it("should detect AKS resource when k8s.cluster.name attribute is present", () => {

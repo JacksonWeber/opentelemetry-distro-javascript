@@ -118,8 +118,8 @@ describe("sdkstats/metrics", () => {
   });
 
   it("emits a Feature.instrumentations observation tagged with type=1", async () => {
-    setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
-    setSdkStatsInstrumentation(SdkStatsInstrumentation.REDIS);
+    setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_MONGODB);
+    setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_REDIS);
 
     const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
     const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -141,7 +141,7 @@ describe("sdkstats/metrics", () => {
     const point = instrMetrics[0].dataPoints[0];
     expect(point.attributes.type).toBe(FEATURE_TYPE_INSTRUMENTATION);
     expect(point.attributes.feature).toBe(
-      String(SdkStatsInstrumentation.MONGODB | SdkStatsInstrumentation.REDIS),
+      String(SdkStatsInstrumentation.DISABLE_MONGODB | SdkStatsInstrumentation.DISABLE_REDIS),
     );
 
     await meterProvider.shutdown();
@@ -173,7 +173,7 @@ describe("sdkstats/metrics", () => {
     it("skips Feature/Feature.instrumentations gauges but still registers network gauges", async () => {
       // Set bits that would normally trigger feature/instrumentation observations.
       setSdkStatsFeature(SdkStatsFeature.DISTRO);
-      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_MONGODB);
       // Drop a network counter so a request_success_count observation will fire.
       _resetNetworkStatsForTest();
       recordSuccess(A365_ENDPOINT_CATEGORY, "contoso.example.com");

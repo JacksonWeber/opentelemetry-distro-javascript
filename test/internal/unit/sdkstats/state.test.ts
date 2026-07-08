@@ -56,8 +56,10 @@ describe("sdkstats/state", () => {
     it("ORs in shared SdkStatsFeature values", () => {
       setSdkStatsFeature(SdkStatsFeature.DISTRO);
       expect(getSdkStatsFeatureFlags()).toBe(SdkStatsFeature.DISTRO);
-      setSdkStatsFeature(SdkStatsFeature.LIVE_METRICS);
-      expect(getSdkStatsFeatureFlags()).toBe(SdkStatsFeature.DISTRO | SdkStatsFeature.LIVE_METRICS);
+      setSdkStatsFeature(SdkStatsFeature.DISABLE_LIVE_METRICS);
+      expect(getSdkStatsFeatureFlags()).toBe(
+        SdkStatsFeature.DISTRO | SdkStatsFeature.DISABLE_LIVE_METRICS,
+      );
     });
 
     it("ORs in distro-specific values without colliding with SdkStatsFeature", () => {
@@ -81,10 +83,10 @@ describe("sdkstats/state", () => {
   describe("instrumentation bitmask", () => {
     it("starts at 0 and ORs in values", () => {
       expect(getSdkStatsInstrumentationFlags()).toBe(0);
-      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
-      setSdkStatsInstrumentation(SdkStatsInstrumentation.REDIS);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_MONGODB);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_REDIS);
       expect(getSdkStatsInstrumentationFlags()).toBe(
-        SdkStatsInstrumentation.MONGODB | SdkStatsInstrumentation.REDIS,
+        SdkStatsInstrumentation.DISABLE_MONGODB | SdkStatsInstrumentation.DISABLE_REDIS,
       );
     });
   });
@@ -107,7 +109,7 @@ describe("sdkstats/state", () => {
   describe("_resetSdkStatsStateForTest", () => {
     it("clears all bitmasks and the shutdown flag", () => {
       setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
-      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.DISABLE_MONGODB);
       setSdkStatsShutdown(true);
       _resetSdkStatsStateForTest();
       expect(getSdkStatsFeatureFlags()).toBe(0);
