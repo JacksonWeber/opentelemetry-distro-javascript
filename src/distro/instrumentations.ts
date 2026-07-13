@@ -9,7 +9,6 @@
 
 import type { RequestOptions } from "node:http";
 import { createAzureSdkInstrumentation } from "@azure/opentelemetry-instrumentation-azure-sdk";
-import { RateLimitedSampler } from "@azure/monitor-opentelemetry-exporter";
 import type { Sampler } from "@opentelemetry/sdk-trace-base";
 import type {
   HttpInstrumentationConfig,
@@ -117,21 +116,24 @@ export function createInstrumentations(
 // ── Sampler ─────────────────────────────────────────────────────────
 
 /**
- * Create an OTel sampler based on the resolved configuration.
+ * Create the global OTel sampler for the distro.
+ *
+ * The global sampler is 100% by default so that every exporter (A365, Azure
+ * Monitor, OTLP, console) and the standard-metrics pipeline receive all spans.
+ * Azure Monitor-specific sampling (rate-limited via `tracesPerSecond` or
+ * percentage via `samplingRatio`) is applied downstream, scoped to the Azure
+ * Monitor export pipeline only — see the Azure Monitor `TraceHandler`.
  *
  * Precedence:
  * 1. Explicit sampler provided via environment config (e.g. OTEL_TRACES_SAMPLER)
- * 2. Rate-limited sampler when `tracesPerSecond` > 0
- * 3. Percentage-based ApplicationInsightsSampler using `samplingRatio`
+ *    which is a deliberate global override.
+ * 2. 100% ApplicationInsightsSampler.
  */
 export function createSampler(config: InternalConfig): Sampler {
   if (config.sampler) {
     return config.sampler;
   }
-  if (config.tracesPerSecond && config.tracesPerSecond > 0) {
-    return new RateLimitedSampler(config.tracesPerSecond);
-  }
-  return new ApplicationInsightsSampler(config.samplingRatio);
+  return new ApplicationInsightsSampler(1);
 }
 
 // ── Metric views ────────────────────────────────────────────────────

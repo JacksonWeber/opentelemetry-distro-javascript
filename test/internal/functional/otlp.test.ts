@@ -130,9 +130,8 @@ describe("OTLP Integration Tests", () => {
 
   function startDistro(): void {
     useMicrosoftOpenTelemetry({
-      // Use 100% sampling so all spans are recorded and exported.
-      // The default tracesPerSecond (5) uses a RateLimitedSampler that may drop
-      // spans with NOT_RECORD, preventing them from reaching any processor.
+      // Use 100% sampling so all spans are recorded and exported. This is now
+      // the default; kept explicit here for clarity of intent.
       samplingRatio: 1,
       tracesPerSecond: 0,
       azureMonitor: {

@@ -29,7 +29,11 @@ import {
 export class InternalConfig {
   /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
   public samplingRatio: number;
-  /** The maximum number of spans to sample per second. */
+  /**
+   * The maximum number of traces per second to export to Azure Monitor. When
+   * greater than 0, rate-limited sampling is applied to the Azure Monitor
+   * export pipeline only. Default 0 (no rate limiting — 100% sampling).
+   */
   public tracesPerSecond?: number;
   /** Azure Monitor Exporter Configuration */
   public azureMonitorExporterOptions: AzureMonitorExporterOptions;
@@ -74,7 +78,7 @@ export class InternalConfig {
     // Default values
     this.azureMonitorExporterOptions = {};
     this.samplingRatio = 1;
-    this.tracesPerSecond = 5;
+    this.tracesPerSecond = 0;
     this.enableLiveMetrics = true;
     this.enableStandardMetrics = true;
     this.enableTraceBasedSamplingForLogs = false;

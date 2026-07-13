@@ -3,8 +3,12 @@
 
 import type { RequestOptions } from "node:http";
 import { createAzureSdkInstrumentation } from "@azure/opentelemetry-instrumentation-azure-sdk";
-import { AzureMonitorTraceExporter } from "@azure/monitor-opentelemetry-exporter";
-import type { BufferConfig } from "@opentelemetry/sdk-trace-base";
+import {
+  AzureMonitorTraceExporter,
+  AzureMonitorSamplingSpanProcessor,
+  createAzureMonitorSampler,
+} from "@azure/monitor-opentelemetry-exporter";
+import type { BufferConfig, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type {
   HttpInstrumentationConfig,
@@ -26,7 +30,7 @@ import type { Instrumentation } from "@opentelemetry/instrumentation";
  * Azure Monitor OpenTelemetry Trace Handler
  */
 export class TraceHandler {
-  private _batchSpanProcessor: BatchSpanProcessor;
+  private _batchSpanProcessor: SpanProcessor;
   private _azureSpanProcessor: AzureMonitorSpanProcessor;
   private _azureExporter: AzureMonitorTraceExporter;
   private _instrumentations: Instrumentation[];
@@ -49,12 +53,28 @@ export class TraceHandler {
       exportTimeoutMillis: 30000,
       maxQueueSize: 2048,
     };
-    this._batchSpanProcessor = new BatchSpanProcessor(this._azureExporter, bufferConfig);
+    const batchSpanProcessor = new BatchSpanProcessor(this._azureExporter, bufferConfig);
+    // Sampling (rate-limited via tracesPerSecond or percentage via samplingRatio)
+    // is scoped to the Azure Monitor export pipeline only. The global sampler
+    // stays at 100% so other exporters (e.g. A365) and standard metrics keep
+    // receiving all spans. When no sampling is configured the plain batch
+    // processor is used so there is zero per-span overhead.
+    const tracesPerSecond = this._config.tracesPerSecond;
+    const samplingRatio = this._config.samplingRatio;
+    const samplingConfigured =
+      (tracesPerSecond !== undefined && tracesPerSecond > 0) ||
+      (samplingRatio !== undefined && samplingRatio < 1);
+    if (samplingConfigured) {
+      const sampler = createAzureMonitorSampler({ tracesPerSecond, samplingRatio });
+      this._batchSpanProcessor = new AzureMonitorSamplingSpanProcessor(batchSpanProcessor, sampler);
+    } else {
+      this._batchSpanProcessor = batchSpanProcessor;
+    }
     this._azureSpanProcessor = new AzureMonitorSpanProcessor(this._metricHandler);
     this._initializeInstrumentations();
   }
 
-  public getBatchSpanProcessor(): BatchSpanProcessor {
+  public getBatchSpanProcessor(): SpanProcessor {
     return this._batchSpanProcessor;
   }
 

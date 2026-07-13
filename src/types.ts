@@ -27,7 +27,12 @@ export interface MicrosoftOpenTelemetryOptions {
   resource?: Resource;
   /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
   samplingRatio?: number;
-  /** The maximum number of traces to sample per second (Default 5). Set to 0 to use samplingRatio instead. */
+  /**
+   * The maximum number of traces per second to export to Azure Monitor (Default 0).
+   * When greater than 0, rate-limited sampling is applied to the Azure Monitor
+   * export pipeline only; other exporters (e.g. A365) are unaffected. Set to 0
+   * to use `samplingRatio` instead.
+   */
   tracesPerSecond?: number;
   /** OpenTelemetry Instrumentations configuration */
   instrumentationOptions?: InstrumentationOptions;

@@ -11,7 +11,7 @@ import {
   type HttpInstrumentationConfig,
 } from "@opentelemetry/instrumentation-http";
 import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { AlwaysOnSampler } from "@opentelemetry/sdk-trace-base";
+import { AlwaysOnSampler, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { Span } from "@opentelemetry/api";
 import { metrics, trace } from "@opentelemetry/api";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
@@ -31,7 +31,7 @@ import type Http from "node:http";
 import { ExportResultCode } from "@opentelemetry/core";
 import type { AzureMonitorTraceExporter } from "@azure/monitor-opentelemetry-exporter";
 import type { Instrumentation } from "@opentelemetry/instrumentation";
-import { RateLimitedSampler } from "@azure/monitor-opentelemetry-exporter";
+import { AzureMonitorSamplingSpanProcessor } from "@azure/monitor-opentelemetry-exporter";
 
 describe("Library/TraceHandler", () => {
   const connectionString = "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
@@ -118,7 +118,7 @@ describe("Library/TraceHandler", () => {
       };
     });
 
-    it("prefers sampler provided by env/config", () => {
+    it("prefers global sampler provided by env/config", () => {
       const customSampler = new AlwaysOnSampler();
       _config.sampler = customSampler;
       _config.tracesPerSecond = 10;
@@ -127,43 +127,64 @@ describe("Library/TraceHandler", () => {
       expect(createSampler(_config)).toBe(customSampler);
     });
 
-    it("falls back to rate-limited sampler when tracesPerSecond is set", () => {
+    it("uses a 100% ApplicationInsightsSampler globally regardless of tracesPerSecond", () => {
       _config.tracesPerSecond = 7;
       _config.samplingRatio = 0.5;
-
-      expect(createSampler(_config)).toBeInstanceOf(RateLimitedSampler);
-    });
-
-    it("uses ApplicationInsightsSampler when tracesPerSecond is 0", () => {
-      _config.tracesPerSecond = 0;
-      _config.samplingRatio = 0.3;
-
-      const sampler = createSampler(_config);
-      expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
-      expect(sampler.toString()).toBe("ApplicationInsightsSampler{0.3}");
-    });
-
-    it("uses ApplicationInsightsSampler with ratio 1 when tracesPerSecond is 0 and samplingRatio is default", () => {
-      _config.tracesPerSecond = 0;
-      // samplingRatio defaults to 1 from InternalConfig constructor
 
       const sampler = createSampler(_config);
       expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
       expect(sampler.toString()).toBe("ApplicationInsightsSampler{1}");
     });
 
-    it("uses RateLimitedSampler by default with tracesPerSecond=5", () => {
-      // Default config has tracesPerSecond=5
-      expect(createSampler(_config)).toBeInstanceOf(RateLimitedSampler);
-    });
-
-    it("uses ApplicationInsightsSampler when tracesPerSecond is explicitly undefined", () => {
-      _config.tracesPerSecond = undefined;
-      _config.samplingRatio = 0.2;
+    it("uses a 100% ApplicationInsightsSampler globally regardless of samplingRatio", () => {
+      _config.tracesPerSecond = 0;
+      _config.samplingRatio = 0.3;
 
       const sampler = createSampler(_config);
       expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
-      expect(sampler.toString()).toBe("ApplicationInsightsSampler{0.2}");
+      expect(sampler.toString()).toBe("ApplicationInsightsSampler{1}");
+    });
+
+    it("uses a 100% ApplicationInsightsSampler globally by default", () => {
+      // Default config has tracesPerSecond=0 and samplingRatio=1
+      const sampler = createSampler(_config);
+      expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
+      expect(sampler.toString()).toBe("ApplicationInsightsSampler{1}");
+    });
+  });
+
+  describe("Azure Monitor export sampling", () => {
+    beforeEach(() => {
+      _config.instrumentationOptions = {
+        http: { enabled: false },
+        azureSdk: { enabled: false },
+        mongoDb: { enabled: false },
+        mySql: { enabled: false },
+        postgreSql: { enabled: false },
+        redis: { enabled: false },
+        redis4: { enabled: false },
+      };
+    });
+
+    it("uses a plain BatchSpanProcessor when no sampling is configured (default)", () => {
+      metricHandler = new MetricHandler(_config);
+      handler = new TraceHandler(_config, metricHandler);
+      expect(handler.getBatchSpanProcessor()).toBeInstanceOf(BatchSpanProcessor);
+    });
+
+    it("wraps the batch processor when tracesPerSecond is set", () => {
+      _config.tracesPerSecond = 5;
+      metricHandler = new MetricHandler(_config);
+      handler = new TraceHandler(_config, metricHandler);
+      expect(handler.getBatchSpanProcessor()).toBeInstanceOf(AzureMonitorSamplingSpanProcessor);
+    });
+
+    it("wraps the batch processor when samplingRatio is below 1", () => {
+      _config.tracesPerSecond = 0;
+      _config.samplingRatio = 0.5;
+      metricHandler = new MetricHandler(_config);
+      handler = new TraceHandler(_config, metricHandler);
+      expect(handler.getBatchSpanProcessor()).toBeInstanceOf(AzureMonitorSamplingSpanProcessor);
     });
   });
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Default trace sampling is now 100% across the distro. Rate-limited sampling (`tracesPerSecond`) and percentage sampling (`samplingRatio`) are applied only to the Azure Monitor export pipeline, so the A365 exporter (and any other exporter) always receives 100% of telemetry. `tracesPerSecond` now defaults to `0` (no rate limiting).
+
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
 
