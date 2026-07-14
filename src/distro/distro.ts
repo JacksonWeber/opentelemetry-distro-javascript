@@ -32,6 +32,7 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import { resolveAgent365Endpoint } from "../a365/exporter/utils.js";
 import { configureA365Logger } from "../a365/logging.js";
 import {
   GenAIMainAgentLogRecordProcessor,
@@ -62,6 +63,7 @@ let isShutdown = false;
 
 const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof InstrumentationOptions> = [
   "http",
+  "undici",
   "azureSdk",
   "mongoDb",
   "mySql",
@@ -78,6 +80,33 @@ const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof Instrumenta
  * the other is not inadvertently disabled.
  */
 const REDIS_LINKED_KEYS: ReadonlyArray<keyof InstrumentationOptions> = ["redis", "redis4"];
+
+/**
+ * Resolve the origin(s) of the A365 fetch-based exporter endpoint so the undici
+ * instrumentation can skip tracing our own telemetry export requests. Returns
+ * an empty list when the A365 exporter is not active or the endpoint cannot be
+ * resolved.
+ *
+ * @internal
+ */
+export function _resolveA365ExporterOrigins(a365Config: A365Configuration): string[] {
+  if (!a365Config.enabled || !a365Config.enableObservabilityExporter) {
+    return [];
+  }
+  let baseUrl = a365Config.domainOverride;
+  if (!baseUrl) {
+    try {
+      baseUrl = resolveAgent365Endpoint(a365Config.clusterCategory);
+    } catch {
+      return [];
+    }
+  }
+  try {
+    return [new URL(baseUrl).origin];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * When A365 export is enabled, default to GenAI-focused telemetry by disabling
@@ -241,8 +270,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   );
 
   // ── Instrumentations, sampler, and views (always created) ─────────
+  // When the fetch-based A365 exporter is active, tell the undici
+  // instrumentation to skip its export requests so they are not traced as
+  // spurious client (dependency) spans on other exporters (e.g. Azure Monitor).
+  const ignoreUndiciOrigins = _resolveA365ExporterOrigins(a365Config);
   const instrumentations = createInstrumentations(config, {
     filterAzureMonitorRequests: azureMonitorEnabled,
+    ignoreUndiciOrigins,
   });
   const sampler = createSampler(config);
   const views: ViewOptions[] = createViews(config);

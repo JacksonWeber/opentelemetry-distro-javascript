@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Instrument outgoing `fetch` (undici) requests so HTTP client spans are captured for `fetch`-based clients such as the OpenAI SDK used by LangChain
+
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
 
