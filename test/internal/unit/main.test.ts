@@ -1463,7 +1463,7 @@ describe("Main functions", () => {
     });
 
     await vi.waitFor(() => {
-      expect(instrumentSpy).toHaveBeenCalledWith(expect.any(Object));
+      expect(instrumentSpy).toHaveBeenCalledWith(expect.any(Object), expect.any(Object));
     });
 
     await shutdownMicrosoftOpenTelemetry();

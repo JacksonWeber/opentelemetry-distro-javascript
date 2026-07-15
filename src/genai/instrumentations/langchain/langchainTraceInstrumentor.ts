@@ -12,9 +12,13 @@ import {
   isWrapped,
 } from "@opentelemetry/instrumentation";
 import { LangChainTracer } from "./tracer.js";
+import type { LangChainTracerAgentConfig } from "./tracer.js";
 
 type CallbackManagerModuleType = typeof CallbackManagerModule;
-type LangChainTracerCtor = new (tracer: Tracer) => LangChainTracer;
+type LangChainTracerCtor = new (
+  tracer: Tracer,
+  agentConfig?: LangChainTracerAgentConfig,
+) => LangChainTracer;
 
 class LangChainTraceInstrumentorImpl extends InstrumentationBase<InstrumentationConfig> {
   private static _instance: LangChainTraceInstrumentorImpl | null = null;
@@ -29,6 +33,8 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
   // A static import is safe: by the time `patch()` runs, the callbacks
   // manager module is already loaded (it is the `module` argument).
   private _tracerCtor: LangChainTracerCtor = LangChainTracer;
+  /** Optional agent identity applied to invoke_agent spans (from config). */
+  private _agentConfig: LangChainTracerAgentConfig = {};
 
   private constructor() {
     if (LangChainTraceInstrumentorImpl._instance !== null) {
@@ -102,7 +108,12 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
         this: CallbackManagerModuleType,
         ...args: Parameters<(typeof CallbackManager)["_configureSync"]>
       ) {
-        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], instrumentor._tracerCtor);
+        args[0] = addTracerToHandlers(
+          instrumentor.otelTracer,
+          args[0],
+          instrumentor._tracerCtor,
+          instrumentor._agentConfig,
+        );
         diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
         return original.apply(this, args);
       };
@@ -113,7 +124,13 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
     return module;
   }
 
-  manuallyInstrumentImpl(module: CallbackManagerModuleType): void {
+  manuallyInstrumentImpl(
+    module: CallbackManagerModuleType,
+    agentConfig?: LangChainTracerAgentConfig,
+  ): void {
+    if (agentConfig) {
+      this._agentConfig = agentConfig;
+    }
     diag.info("[LangChainTraceInstrumentor] Manually instrumenting CallbackManagerModule");
     this.patch(module);
   }
@@ -152,10 +169,15 @@ export class LangChainTraceInstrumentor {
   /**
    * Initialize and auto-instrument for LangChain
    * @param module The CallbackManager module to instrument
-   * @param options Optional configuration options
+   * @param agentConfig Optional agent identity (agentId/agentName) recorded on
+   *   invoke_agent spans so the Azure Monitor Agents (preview) experience can
+   *   identify the agent.
    */
-  static instrument(module: CallbackManagerModuleType): void {
-    LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(module);
+  static instrument(
+    module: CallbackManagerModuleType,
+    agentConfig?: LangChainTracerAgentConfig,
+  ): void {
+    LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(module, agentConfig);
   }
 
   /**
@@ -190,20 +212,21 @@ export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
   tracerCtor: LangChainTracerCtor,
+  agentConfig?: LangChainTracerAgentConfig,
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
-    return [new tracerCtor(tracer)];
+    return [new tracerCtor(tracer, agentConfig)];
   }
 
   if (Array.isArray(handlers)) {
     if (!handlers.some((h) => h instanceof tracerCtor)) {
-      handlers.push(new tracerCtor(tracer));
+      handlers.push(new tracerCtor(tracer, agentConfig));
     }
     return handlers;
   }
 
   if (!handlers.inheritableHandlers.some((h) => h instanceof tracerCtor)) {
-    handlers.addHandler(new tracerCtor(tracer), true);
+    handlers.addHandler(new tracerCtor(tracer, agentConfig), true);
   }
   return handlers;
 }

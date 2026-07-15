@@ -14,6 +14,8 @@ import type { Run } from "@langchain/core/tracers/base";
 import { LangChainTracer } from "../../../../../src/genai/instrumentations/langchain/tracer.js";
 import {
   ATTR_ERROR_MESSAGE,
+  ATTR_GEN_AI_AGENT_ID,
+  ATTR_GEN_AI_AGENT_NAME,
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
@@ -208,6 +210,53 @@ describe("LangChainTracer", () => {
       await lct.onRunCreate(run);
       const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
       assert.strictEqual(kind, SpanKind.CLIENT);
+    });
+
+    it("sets span kind to CLIENT for a top-level invoke_agent run (not SERVER)", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeLangGraphRun({ name: "WeatherBot" });
+      await lct.onRunCreate(run);
+      const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
+      assert.strictEqual(kind, SpanKind.CLIENT);
+    });
+
+    it("sets span kind to INTERNAL for a nested invoke_agent run", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const parent = makeLangGraphRun({ id: "agent-parent", name: "MainAgent" });
+      const child = makeLangGraphRun({
+        id: "agent-child",
+        name: "SubAgent",
+        parent_run_id: "agent-parent",
+      });
+      await lct.onRunCreate(parent);
+      await lct.onRunCreate(child);
+      const childKind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[1][1]?.kind;
+      assert.strictEqual(childKind, SpanKind.INTERNAL);
+    });
+
+    it("records gen_ai.agent.id from config and keeps the run's agent name on invoke_agent spans", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer, {
+        agentId: "weather_info_agent_771929",
+        agentName: "Configured fallback name",
+      });
+      const run = makeLangGraphRun({ name: "MyAgent" });
+      await lct.onRunCreate(run);
+      const span = tracer.lastSpan as ReturnType<typeof createMockSpan>;
+      // agent.id always comes from config; agent.name prefers the run's own name.
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_AGENT_ID], "weather_info_agent_771929");
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_AGENT_NAME], "MyAgent");
+    });
+
+    it("does not set gen_ai.agent.id on non-agent runs", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer, { agentId: "agent-1" });
+      const run = makeRun(); // llm run
+      await lct.onRunCreate(run);
+      const span = tracer.lastSpan as ReturnType<typeof createMockSpan>;
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_AGENT_ID], undefined);
     });
   });
 

@@ -532,7 +532,7 @@ async function initializeOpenAIAgentsInstrumentation(
 }
 
 async function initializeLangChainInstrumentation(
-  _options: LangChainInstrumentationConfig,
+  options: LangChainInstrumentationConfig,
 ): Promise<void> {
   try {
     const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
@@ -540,7 +540,10 @@ async function initializeLangChainInstrumentation(
       import("@langchain/core/callbacks/manager"),
     ]);
     if (isShutdown) return;
-    LangChainTraceInstrumentor.instrument(callbackManagerModule);
+    LangChainTraceInstrumentor.instrument(callbackManagerModule, {
+      agentId: options?.agentId,
+      agentName: options?.agentName,
+    });
   } catch (error) {
     Logger.getInstance().debug(
       "[GenAI] Skipping LangChain instrumentation, @langchain/core is not installed.",

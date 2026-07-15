@@ -139,8 +139,21 @@ export interface OpenAIAgentsInstrumentationConfig extends InstrumentationConfig
 }
 
 /** Configuration for LangChain instrumentation. */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface LangChainInstrumentationConfig extends InstrumentationConfig {}
+export interface LangChainInstrumentationConfig extends InstrumentationConfig {
+  /**
+   * Stable unique identifier of the agent, recorded as `gen_ai.agent.id` on
+   * `invoke_agent` spans. Aligns with the Python distro's
+   * `instrumentation_options.langchain.agent_id` and lets the Azure Monitor
+   * Agents (preview) experience group traces by agent.
+   */
+  agentId?: string;
+  /**
+   * Human-readable agent name, recorded as `gen_ai.agent.name` on
+   * `invoke_agent` spans when the LangGraph run does not supply one. Mirrors
+   * the Python distro's `instrumentation_options.langchain.agent_name`.
+   */
+  agentName?: string;
+}
 
 /**
  * SDK Stats Features Configuration interface

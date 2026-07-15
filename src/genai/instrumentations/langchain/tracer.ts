@@ -9,6 +9,8 @@ import { diag } from "@opentelemetry/api";
 import {
   ATTR_ERROR_MESSAGE,
   ATTR_ERROR_TYPE,
+  ATTR_GEN_AI_AGENT_ID,
+  ATTR_GEN_AI_AGENT_NAME,
   ATTR_GEN_AI_CALLER_AGENT_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
 } from "../../index.js";
@@ -34,18 +36,28 @@ type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: nu
  * - Content attributes (messages, tool args) are always recorded
  *   (aligned with Python/.NET SDKs).
  */
+/** Optional agent identity applied to `invoke_agent` spans. Mirrors the
+ * Python distro's `instrumentation_options.langchain` agent config. */
+export interface LangChainTracerAgentConfig {
+  agentId?: string;
+  agentName?: string;
+}
+
 export class LangChainTracer extends BaseTracer {
   /** Hard cap on concurrent tracked runs to prevent memory leaks. */
   private static readonly MAX_RUNS = 10_000;
   private tracer: Tracer;
+  /** Optional agent identity for invoke_agent spans (from instrumentation config). */
+  private agentConfig: LangChainTracerAgentConfig;
   /** Active runs keyed by LangChain run ID. */
   private runs = new Map<string, RunWithSpan>();
   /** Maps each run ID → its parent run ID for parent-span-context lookup. */
   private parentByRunId = new Map<string, string | undefined>();
 
-  constructor(tracer: Tracer) {
+  constructor(tracer: Tracer, agentConfig: LangChainTracerAgentConfig = {}) {
     super();
     this.tracer = tracer;
+    this.agentConfig = agentConfig;
   }
 
   name = "OpenTelemetryLangChainTracer";
@@ -101,8 +113,16 @@ export class LangChainTracer extends BaseTracer {
     let spanName = run.name;
     let kind: SpanKind = SpanKind.INTERNAL;
     if (operation === "invoke_agent") {
-      spanName = `${operation} ${run.name}`;
-      kind = SpanKind.SERVER;
+      // Prefer the run's own agent name (keeps distinct names in multi-agent
+      // apps); fall back to the configured agentName. Matches the Python distro.
+      const agentName = run.name ?? this.agentConfig.agentName;
+      spanName = `${operation} ${agentName ?? ""}`.trim();
+      // Per the OTel GenAI agent-span spec (and the Microsoft Python distro),
+      // invoke_agent is a CLIENT span when top-level and INTERNAL when nested
+      // under another agent — never SERVER. SERVER maps to an Azure Monitor
+      // "request", which the Agents (preview) experience does not render as an
+      // agent call.
+      kind = this.hasInvokeAgentAncestor(run) ? SpanKind.INTERNAL : SpanKind.CLIENT;
     } else if (operation === "execute_tool") {
       spanName = `${operation} ${run.name}`;
       kind = SpanKind.CLIENT;
@@ -136,6 +156,7 @@ export class LangChainTracer extends BaseTracer {
     try {
       Utils.setOperationTypeAttribute(operation, span);
       Utils.setAgentAttributes(run, span);
+      this.applyConfiguredAgentIdentity(operation, run, span);
       Utils.setSessionIdAttribute(run, span);
     } catch (error) {
       diag.debug(
@@ -203,6 +224,7 @@ export class LangChainTracer extends BaseTracer {
       // (e.g. metadata that only becomes available mid-run) still land.
       Utils.setOperationTypeAttribute(operation, span);
       Utils.setAgentAttributes(run, span);
+      this.applyConfiguredAgentIdentity(operation, run, span);
       if (operation === "invoke_agent") {
         const callerName = this.findCallerAgentName(run);
         if (callerName) {
@@ -264,5 +286,37 @@ export class LangChainTracer extends BaseTracer {
       pid = this.parentByRunId.get(pid);
     }
     return undefined;
+  }
+
+  /**
+   * Whether this run has an ancestor that is itself an invoke_agent run,
+   * i.e. it is a nested (sub-)agent. Top-level agents get a CLIENT span,
+   * nested agents get INTERNAL, per the OTel GenAI agent-span spec.
+   */
+  private hasInvokeAgentAncestor(run: Run): boolean {
+    return this.findCallerAgentName(run) !== undefined;
+  }
+
+  /**
+   * Apply the configured agent identity to invoke_agent spans:
+   * `gen_ai.agent.id` from config (never set by the run itself) and, as a
+   * fallback, `gen_ai.agent.name` from config when the run did not supply one
+   * (Utils.setAgentAttributes sets it from the run when available). Aligns with
+   * the Microsoft Python distro so the Azure Monitor Agents (preview)
+   * experience can identify and group the agent.
+   */
+  private applyConfiguredAgentIdentity(operation: string, run: Run, span: Span): void {
+    if (operation !== "invoke_agent") {
+      return;
+    }
+    if (this.agentConfig.agentId) {
+      span.setAttribute(ATTR_GEN_AI_AGENT_ID, this.agentConfig.agentId);
+    }
+    // Only fall back to the configured name when the run itself did not yield a
+    // name (Utils.setAgentAttributes already set it for named LangGraph agents).
+    const runProvidesName = Utils.getOperationType(run) === "invoke_agent" && Utils.isString(run.name);
+    if (this.agentConfig.agentName && !runProvidesName) {
+      span.setAttribute(ATTR_GEN_AI_AGENT_NAME, this.agentConfig.agentName);
+    }
   }
 }
