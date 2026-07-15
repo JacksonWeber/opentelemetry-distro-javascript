@@ -168,6 +168,24 @@ describe("LangChainTracer", () => {
       assert.ok(spanName.includes("WeatherBot"), "span name should include agent name");
     });
 
+    it("sets span kind to INTERNAL for LangGraph agent runs so they export as dependencies", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeLangGraphRun({ name: "WeatherBot" });
+      await lct.onRunCreate(run);
+      const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
+      assert.strictEqual(kind, SpanKind.INTERNAL);
+    });
+
+    it("sets span kind to INTERNAL for tool runs (in-process execution)", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeRun({ run_type: "tool", name: "search", serialized: { name: "search" } });
+      await lct.onRunCreate(run);
+      const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
+      assert.strictEqual(kind, SpanKind.INTERNAL);
+    });
+
     it("skips internal runs tagged langsmith:hidden", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);

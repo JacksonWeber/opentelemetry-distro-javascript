@@ -4,6 +4,11 @@
 
 ### Features Added
 - Instrument outgoing `fetch` (undici) requests so HTTP client spans are captured for `fetch`-based clients such as the OpenAI SDK used by LangChain
+- Add `whenGenAIInstrumentationsReady()` so ESM apps can await GenAI (LangChain / OpenAI Agents) instrumentation setup before their first invocation, eliminating a startup race that could drop the top-level `invoke_agent` span
+
+### Bugs Fixed
+- LangChain: emit `invoke_agent` spans as `INTERNAL` (not `SERVER`) so Azure Monitor records them as dependencies and they surface in the Application Insights "AI agents (preview)" experience
+- LangChain: emit `execute_tool` spans as `INTERNAL` (not `CLIENT`) to match the GenAI "execute tool" semantic convention and the Python distro (in-process tool execution)
 
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`

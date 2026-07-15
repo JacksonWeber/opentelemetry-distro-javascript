@@ -102,10 +102,19 @@ export class LangChainTracer extends BaseTracer {
     let kind: SpanKind = SpanKind.INTERNAL;
     if (operation === "invoke_agent") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.SERVER;
+      // In-process agent orchestration (e.g. LangGraph) maps to the GenAI
+      // "invoke agent internal span" (SpanKind.INTERNAL), not SERVER. The Azure
+      // Monitor exporter turns SERVER spans into requests, which the
+      // Application Insights "AI agents (preview)" experience does not treat as
+      // agent calls; INTERNAL exports them as dependencies so they surface in
+      // the agents graph. Matches the OTel GenAI semconv and the Python distro.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "execute_tool") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.CLIENT;
+      // Tool execution runs in-process, so per the GenAI "execute tool" semantic
+      // convention (and matching the Python distro) the span kind is INTERNAL,
+      // not CLIENT — it is not an outbound/remote dependency.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "chat") {
       spanName = `${operation} ${Utils.getModel(run) || run.name}`.trim();
       kind = SpanKind.CLIENT;

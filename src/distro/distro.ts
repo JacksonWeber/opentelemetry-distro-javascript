@@ -496,16 +496,38 @@ export function _getSdkInstance(): NodeSDK | undefined {
 // is never an error.  Here we eagerly import the optional @openai/agents and
 // @langchain/core packages, so we must tolerate them not being installed.
 // This will be migrated to upstream OTel instrumentation hooks once they are ready.
+
+// Resolves once all GenAI instrumentations that were started have finished
+// wiring up their module patches. ESM applications can `await` this (e.g. via a
+// top-level `await` in their telemetry bootstrap) to guarantee LangChain is
+// patched before the first chain/agent invocation — closing the race where the
+// top-level CompiledStateGraph run configures its callbacks before the async
+// patch lands, which would otherwise drop the outer `invoke_agent` span.
+let genAIInstrumentationsReady: Promise<void> = Promise.resolve();
+
+/**
+ * Await the completion of GenAI instrumentation setup (LangChain / OpenAI
+ * Agents). Resolves immediately when no GenAI instrumentation is active.
+ */
+export function whenGenAIInstrumentationsReady(): Promise<void> {
+  return genAIInstrumentationsReady;
+}
+
 function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
+  const pending: Promise<void>[] = [];
+
   const openAIOptions = options?.openaiAgents;
   if (openAIOptions?.enabled !== false) {
-    void initializeOpenAIAgentsInstrumentation(openAIOptions ?? {});
+    pending.push(initializeOpenAIAgentsInstrumentation(openAIOptions ?? {}));
   }
 
   const langChainOptions = options?.langchain;
   if (langChainOptions?.enabled !== false) {
-    void initializeLangChainInstrumentation(langChainOptions ?? {});
+    pending.push(initializeLangChainInstrumentation(langChainOptions ?? {}));
   }
+
+  // Track overall readiness so ESM apps can await it before their first invoke.
+  genAIInstrumentationsReady = Promise.allSettled(pending).then(() => undefined);
 }
 
 /**
@@ -534,6 +556,13 @@ async function initializeOpenAIAgentsInstrumentation(
 async function initializeLangChainInstrumentation(
   _options: LangChainInstrumentationConfig,
 ): Promise<void> {
+  // Dynamically import BOTH the instrumentor (its module statically imports the
+  // tracer, which imports @langchain/core) and the callbacks manager module, so
+  // a missing @langchain/core is tolerated. Awaiting these imports guarantees
+  // the tracer constructor is ready before the manual patch is applied. This
+  // whole promise is tracked by whenGenAIInstrumentationsReady(), which ESM
+  // apps can await before their first invoke to avoid the init race that would
+  // otherwise drop the top-level invoke_agent span.
   try {
     const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
       import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js"),
