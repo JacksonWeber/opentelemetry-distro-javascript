@@ -9,6 +9,8 @@ import {
   SpanStatusCode,
   Tracer,
   TraceFlags,
+  context,
+  trace,
 } from "@opentelemetry/api";
 import type { Run } from "@langchain/core/tracers/base";
 import { LangChainTracer } from "../../../../../src/genai/instrumentations/langchain/tracer.js";
@@ -430,6 +432,57 @@ describe("LangChainTracer", () => {
       assert.strictEqual(got(ATTR_GEN_AI_USAGE_INPUT_TOKENS), 4, "input tokens");
       assert.strictEqual(got(ATTR_GEN_AI_USAGE_OUTPUT_TOKENS), 7, "output tokens");
       assert.strictEqual(span.statusObj?.code, SpanStatusCode.OK);
+    });
+  });
+
+  describe("wrapRunExecution", () => {
+    it("runs the body with the run's span active so client spans nest under it", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeRun({ name: "gpt-4o" });
+      await lct.onRunCreate(run);
+
+      // context.with only propagates the active span when a context manager is
+      // registered (the real distro registers one via the NodeTracerProvider).
+      // In isolation we instead assert the contract directly: the run's span is
+      // placed into the context that `context.with` activates around the body.
+      let ctxSpanId: string | undefined;
+      const withSpy = vi
+        .spyOn(context, "with")
+        .mockImplementation((ctx, fn, ...rest: unknown[]) => {
+          ctxSpanId = trace.getSpan(ctx)?.spanContext().spanId;
+          return (fn as (...a: unknown[]) => unknown)(...rest);
+        });
+
+      const result = lct.wrapRunExecution(run.id, () => "body-result");
+
+      assert.strictEqual(result, "body-result", "should return the body's result");
+      assert.strictEqual(withSpy.mock.calls.length, 1, "should activate a context once");
+      assert.strictEqual(
+        ctxSpanId,
+        tracer.lastSpan!.spanContext().spanId,
+        "the run's span should be set on the activated context",
+      );
+    });
+
+    it("invokes the body directly when no span is tracked for the run", () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const withSpy = vi.spyOn(context, "with");
+
+      let called = false;
+      const result = lct.wrapRunExecution("unknown-run-id", () => {
+        called = true;
+        return 42;
+      });
+
+      assert.strictEqual(called, true, "body should still be invoked");
+      assert.strictEqual(result, 42, "should return the body's result");
+      assert.strictEqual(
+        withSpy.mock.calls.length,
+        0,
+        "should not activate a context when no span is tracked",
+      );
     });
   });
 });
