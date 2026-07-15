@@ -4,6 +4,7 @@
 
 ### Features Added
 - Instrument outgoing `fetch` (undici) requests so HTTP client spans are captured for `fetch`-based clients such as the OpenAI SDK used by LangChain
+- LangChain: implement the `wrapRunExecution` callback hook so client spans (HTTP/`fetch`) emitted during a chat model or tool run nest under that run's span instead of forming disconnected root traces (requires langchain-ai/langchainjs#11211)
 - Add `whenGenAIInstrumentationsReady()` so ESM apps can await GenAI (LangChain / OpenAI Agents) instrumentation setup before their first invocation, eliminating a startup race that could drop the top-level `invoke_agent` span
 
 ### Bugs Fixed

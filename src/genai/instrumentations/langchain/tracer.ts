@@ -156,6 +156,29 @@ export class LangChainTracer extends BaseTracer {
   }
 
   /**
+   * LangChain-core run-context hook (`BaseCallbackHandler.wrapRunExecution`).
+   *
+   * Core invokes this around the execution of a run *body* — a chat model's
+   * `_generate`, each step of a streaming response, and a tool's `_call` — after
+   * the corresponding span has been opened in {@link startTracing}. We make that
+   * run's span the active OTel span for the duration of `fn` so that any client
+   * instrumentation firing inside the body (HTTP/`fetch`/undici, DB drivers,
+   * etc.) reads it as the current context and nests its spans under the run's
+   * span, instead of emitting disconnected root traces.
+   *
+   * If no span is tracked for `runId` (e.g. an internal/suppressed run that was
+   * skipped), `fn` is invoked directly so behavior is unchanged.
+   */
+  wrapRunExecution<T>(runId: string, fn: () => T): T {
+    const entry = this.runs.get(runId);
+    if (!entry) {
+      return fn();
+    }
+    const runContext = trace.setSpan(context.active(), entry.span);
+    return context.with(runContext, fn);
+  }
+
+  /**
    * Called by LangChain when a run finishes. Sets status, enriches the span
    * with GenAI attributes, and ends it.
    */
