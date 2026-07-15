@@ -37,6 +37,8 @@ type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: nu
 export class LangChainTracer extends BaseTracer {
   /** Hard cap on concurrent tracked runs to prevent memory leaks. */
   private static readonly MAX_RUNS = 10_000;
+  /** Hard cap on parent-chain walk depth to guard against cycles. */
+  private static readonly MAX_DEPTH = 1_000;
   private tracer: Tracer;
   /** Active runs keyed by LangChain run ID. */
   private runs = new Map<string, RunWithSpan>();
@@ -74,6 +76,12 @@ export class LangChainTracer extends BaseTracer {
       return;
     }
 
+    // Idempotent: a span may already have been created for this run either by
+    // the normal (backgrounded) callback or on demand via ensureSpanForRun.
+    if (this.runs.has(run.id)) {
+      return;
+    }
+
     const operation = Utils.getOperationType(run);
 
     // Skip internal runs (LangSmith hidden, Branch nodes, unknown operations)
@@ -85,6 +93,10 @@ export class LangChainTracer extends BaseTracer {
       diag.debug(
         `[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`,
       );
+      // Note: we intentionally KEEP this run's parentByRunId entry so the
+      // parent-chain walk (getNearestParentSpan / resolveFetchParentSpan) can
+      // traverse through skipped intermediate nodes to a recorded ancestor.
+      // The entry is freed in _endTrace when the run finishes.
       return;
     }
 
@@ -102,10 +114,19 @@ export class LangChainTracer extends BaseTracer {
     let kind: SpanKind = SpanKind.INTERNAL;
     if (operation === "invoke_agent") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.SERVER;
+      // In-process agent orchestration (e.g. LangGraph) maps to the GenAI
+      // "invoke agent internal span" (SpanKind.INTERNAL), not SERVER. The
+      // Azure Monitor exporter turns SERVER spans into requests, which the
+      // Application Insights "AI agents (preview)" experience does not treat
+      // as agent calls; INTERNAL exports them as dependencies so they surface
+      // correctly in the agents graph.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "execute_tool") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.CLIENT;
+      // Tool execution runs in-process, so per the GenAI semantic conventions
+      // "execute tool span" (and matching the Python distro) the span kind is
+      // INTERNAL, not CLIENT — it is not an outbound/remote dependency.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "chat") {
       spanName = `${operation} ${Utils.getModel(run) || run.name}`.trim();
       kind = SpanKind.CLIENT;
@@ -171,11 +192,17 @@ export class LangChainTracer extends BaseTracer {
       diag.debug(
         `[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`,
       );
+      // These runs never get a span; free their parent mapping so it does not
+      // accumulate (parentByRunId is not bounded by MAX_RUNS).
+      this.parentByRunId.delete(run.id);
       return;
     }
 
     const entry = this.runs.get(run.id);
     if (!entry) {
+      // No span was recorded for this run (e.g. suppressed or skipped);
+      // ensure we do not leak its parent mapping.
+      this.parentByRunId.delete(run.id);
       return;
     }
 
@@ -264,5 +291,81 @@ export class LangChainTracer extends BaseTracer {
       pid = this.parentByRunId.get(pid);
     }
     return undefined;
+  }
+
+  /**
+   * Resolve the OTel span an outgoing HTTP (fetch) client span should nest
+   * under, given the LangChain run id active at fetch time. Used ONLY by the
+   * legacy fetch context bridge fallback (for `@langchain/core` versions that
+   * lack the native `wrapRunExecution` hook).
+   *
+   * Resolution is deliberately conservative to avoid mis-parenting under
+   * concurrency: it returns the span for the exact `runId`, otherwise the
+   * nearest recorded ancestor span (walking the parent chain). It does NOT
+   * guess an active descendant LLM — with concurrent sibling LLM runs that
+   * heuristic could attach a request to the wrong chat span (false telemetry).
+   * Nesting under the enclosing agent is less precise but always correct.
+   *
+   * Returns `undefined` when nothing can be resolved, in which case the HTTP
+   * span keeps its default (root) parent — no worse than without the bridge.
+   */
+  resolveFetchParentSpan(runId: string | undefined): Span | undefined {
+    if (!runId) {
+      return undefined;
+    }
+    let cur: string | undefined = runId;
+    let hops = 0;
+    while (cur && hops++ < LangChainTracer.MAX_DEPTH) {
+      const entry = this.runs.get(cur);
+      if (entry) return entry.span;
+      cur = this.parentByRunId.get(cur);
+    }
+    return undefined;
+  }
+
+  /**
+   * Return the OTel span for `runId`, creating it synchronously on demand if
+   * the (backgrounded) span-creating callback has not run yet.
+   *
+   * The LangChain `CallbackManager` registers the run in this tracer's run map
+   * *synchronously* — before it backgrounds the span-creating handler — to
+   * avoid callback-ordering races. So even on the very first request we can
+   * look up the run via {@link getRunById} and open its span immediately.
+   * {@link startTracing} is idempotent, so this never double-creates a span.
+   */
+  ensureSpanForRun(runId: string): Span | undefined {
+    const existing = this.runs.get(runId);
+    if (existing) {
+      return existing.span;
+    }
+    const run = this.getRunById(runId);
+    if (!run) {
+      return undefined;
+    }
+    if (!this.parentByRunId.has(run.id)) {
+      this.parentByRunId.set(run.id, run.parent_run_id);
+    }
+    this.startTracing(run);
+    return this.runs.get(runId)?.span;
+  }
+
+  /**
+   * Native context-propagation hook invoked by `@langchain/core` (via
+   * `BaseRunManager.withRunContext`) around the body of a run — e.g. a chat
+   * model's network call or a tool's execution. Making the run's span active
+   * here means lower-level client instrumentations (undici/`fetch`, DB
+   * drivers) emit their spans nested under it instead of as orphan traces.
+   *
+   * This supersedes the fetch context bridge for `@langchain/core` versions
+   * that support the hook: it is exact (no heuristic), race-free (via
+   * {@link ensureSpanForRun}), and works for every run type — not just
+   * `fetch`.
+   */
+  wrapRunExecution<T>(runId: string, fn: () => T): T {
+    const span = this.ensureSpanForRun(runId);
+    if (!span) {
+      return fn();
+    }
+    return context.with(trace.setSpan(context.active(), span), fn);
   }
 }

@@ -3,6 +3,8 @@
 
 import { afterEach, assert, describe, it, vi } from "vitest";
 import {
+  context,
+  trace,
   Span,
   SpanContext,
   SpanKind,
@@ -10,6 +12,7 @@ import {
   Tracer,
   TraceFlags,
 } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import type { Run } from "@langchain/core/tracers/base";
 import { LangChainTracer } from "../../../../../src/genai/instrumentations/langchain/tracer.js";
 import {
@@ -158,6 +161,15 @@ describe("LangChainTracer", () => {
       assert.ok(spanName.includes("search"), "span name should include tool name");
     });
 
+    it("sets span kind to INTERNAL for tool runs (in-process execution)", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeRun({ run_type: "tool", name: "search", serialized: { name: "search" } });
+      await lct.onRunCreate(run);
+      const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
+      assert.strictEqual(kind, SpanKind.INTERNAL);
+    });
+
     it("creates a span for a LangGraph agent run", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);
@@ -166,6 +178,15 @@ describe("LangChainTracer", () => {
       const spanName = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
       assert.ok(spanName.includes("invoke_agent"), "span name should include invoke_agent");
       assert.ok(spanName.includes("WeatherBot"), "span name should include agent name");
+    });
+
+    it("sets span kind to INTERNAL for LangGraph agent runs so they export as dependencies", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeLangGraphRun({ name: "WeatherBot" });
+      await lct.onRunCreate(run);
+      const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
+      assert.strictEqual(kind, SpanKind.INTERNAL);
     });
 
     it("skips internal runs tagged langsmith:hidden", async () => {
@@ -412,6 +433,121 @@ describe("LangChainTracer", () => {
       assert.strictEqual(got(ATTR_GEN_AI_USAGE_INPUT_TOKENS), 4, "input tokens");
       assert.strictEqual(got(ATTR_GEN_AI_USAGE_OUTPUT_TOKENS), 7, "output tokens");
       assert.strictEqual(span.statusObj?.code, SpanStatusCode.OK);
+    });
+  });
+
+  describe("resolveFetchParentSpan", () => {
+    // Build: agent (langgraph) -> node (plain chain, skipped) -> llm (chat).
+    async function buildHierarchy(lct: LangChainTracer, withLlm = true) {
+      await lct.onRunCreate(makeLangGraphRun({ id: "agent1", name: "MyAgent" }));
+      await lct.onRunCreate(
+        makeRun({
+          id: "node1",
+          run_type: "chain",
+          name: "InnerChain",
+          serialized: {},
+          parent_run_id: "agent1",
+        }),
+      );
+      if (withLlm) {
+        await lct.onRunCreate(
+          makeRun({ id: "llm1", run_type: "llm", name: "model", parent_run_id: "node1" }),
+        );
+      }
+    }
+
+    it("returns undefined when runId is undefined", () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      assert.strictEqual(lct.resolveFetchParentSpan(undefined), undefined);
+    });
+
+    it("returns undefined when the run id is unknown", () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      assert.strictEqual(lct.resolveFetchParentSpan("does-not-exist"), undefined);
+    });
+
+    it("returns the span for the exact run id", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      await buildHierarchy(lct, true);
+      const llmSpan = tracer.spans[1];
+      assert.strictEqual(lct.resolveFetchParentSpan("llm1"), llmSpan);
+    });
+
+    it("walks up to the nearest recorded ancestor for an intermediate (spanless) run", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      await buildHierarchy(lct, true);
+      const agentSpan = tracer.spans[0];
+      // node1 was skipped (no span); resolution walks up to the agent span and
+      // does NOT guess the descendant llm span (avoids concurrency mis-parenting).
+      assert.strictEqual(lct.resolveFetchParentSpan("node1"), agentSpan);
+    });
+
+    it("falls back to the nearest recorded ancestor span when no LLM run exists", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      await buildHierarchy(lct, false);
+      const agentSpan = tracer.spans[0];
+      // node1 was skipped (no span); walk up to the agent span.
+      assert.strictEqual(lct.resolveFetchParentSpan("node1"), agentSpan);
+    });
+  });
+
+  describe("wrapRunExecution", () => {
+    const cm = new AsyncLocalStorageContextManager();
+    async function withCtxManager<T>(fn: () => T | Promise<T>): Promise<T> {
+      context.setGlobalContextManager(cm.enable());
+      try {
+        return await fn();
+      } finally {
+        context.disable();
+      }
+    }
+
+    it("runs fn directly and returns its value when no span/run exists", () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      let ran = false;
+      const result = lct.wrapRunExecution("missing", () => {
+        ran = true;
+        return 42;
+      });
+      assert.strictEqual(ran, true);
+      assert.strictEqual(result, 42);
+    });
+
+    it("makes the run's span active for the duration of fn", async () => {
+      await withCtxManager(async () => {
+        const tracer = createMockTracer();
+        const lct = new LangChainTracer(tracer);
+        await lct.onRunCreate(makeRun({ id: "llmA", run_type: "llm" }));
+        const llmSpan = tracer.spans[0];
+        let active: Span | undefined;
+        lct.wrapRunExecution("llmA", () => {
+          active = trace.getSpan(context.active());
+        });
+        assert.strictEqual(active, llmSpan);
+        // Context is restored after fn returns.
+        assert.strictEqual(trace.getSpan(context.active()), undefined);
+      });
+    });
+
+    it("propagates the active span to async descendants (fetch-like)", async () => {
+      await withCtxManager(async () => {
+        const tracer = createMockTracer();
+        const lct = new LangChainTracer(tracer);
+        await lct.onRunCreate(makeRun({ id: "llmB", run_type: "llm" }));
+        const llmSpan = tracer.spans[0];
+        let active: Span | undefined;
+        await lct.wrapRunExecution("llmB", async () => {
+          await Promise.resolve();
+          active = trace.getSpan(context.active());
+        });
+        assert.strictEqual(active, llmSpan);
+      });
     });
   });
 });

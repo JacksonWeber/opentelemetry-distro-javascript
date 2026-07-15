@@ -535,12 +535,45 @@ async function initializeLangChainInstrumentation(
   _options: LangChainInstrumentationConfig,
 ): Promise<void> {
   try {
-    const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
-      import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js"),
-      import("@langchain/core/callbacks/manager"),
-    ]);
+    // Install the LangChain tracer first. Keep this independent of the
+    // (optional, compatibility-only) fetch bridge so that a failure importing
+    // the bridge or its @langchain/core/singletons dependency can never
+    // prevent the core instrumentation from being installed.
+    const [{ LangChainTraceInstrumentor }, callbackManagerModule] =
+      await Promise.all([
+        import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js"),
+        import("@langchain/core/callbacks/manager"),
+      ]);
     if (isShutdown) return;
     LangChainTraceInstrumentor.instrument(callbackManagerModule);
+
+    // Native context propagation: newer @langchain/core exposes
+    // `BaseRunManager.withRunContext`, which invokes our tracer's
+    // `wrapRunExecution` around each run body so HTTP/`fetch` client spans nest
+    // natively (exact, race-free, all run types). When present we do NOT patch
+    // global fetch. Only fall back to the fetch bridge on older core versions
+    // that lack the hook.
+    const supportsNativeRunContext =
+      typeof (
+        callbackManagerModule as {
+          BaseRunManager?: { prototype?: { withRunContext?: unknown } };
+        }
+      ).BaseRunManager?.prototype?.withRunContext === "function";
+
+    if (!supportsNativeRunContext) {
+      try {
+        const fetchBridge = await import(
+          "../genai/instrumentations/langchain/fetchContextBridge.js"
+        );
+        if (isShutdown) return;
+        fetchBridge.installLangChainFetchContextBridge();
+      } catch (bridgeError) {
+        Logger.getInstance().debug(
+          "[GenAI] LangChain fetch context bridge unavailable; HTTP client spans may not nest under LLM spans on this @langchain/core version.",
+          bridgeError,
+        );
+      }
+    }
   } catch (error) {
     Logger.getInstance().debug(
       "[GenAI] Skipping LangChain instrumentation, @langchain/core is not installed.",
@@ -565,6 +598,9 @@ async function resetGenAIInstrumentations(): Promise<void> {
     const { LangChainTraceInstrumentor } =
       await import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js");
     LangChainTraceInstrumentor.resetInstance();
+    const { uninstallLangChainFetchContextBridge } =
+      await import("../genai/instrumentations/langchain/fetchContextBridge.js");
+    uninstallLangChainFetchContextBridge();
   } catch (error) {
     Logger.getInstance().debug(
       "[GenAI] Skipping LangChain reset, @langchain/core is not installed.",
