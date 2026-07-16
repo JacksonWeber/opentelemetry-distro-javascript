@@ -46,6 +46,15 @@ export class LangChainTracer extends BaseTracer {
   constructor(tracer: Tracer) {
     super();
     this.tracer = tracer;
+    // Force LangChain to await this handler's callbacks instead of queuing them
+    // in the background (the default when LANGCHAIN_CALLBACKS_BACKGROUND !==
+    // "false"). Span creation happens in the async `onRunCreate` callback; if it
+    // runs in the background, the run body (e.g. a chat model's `fetch`) can
+    // execute — and `wrapRunExecution` can be invoked — before the span exists,
+    // so client spans race and only intermittently nest under the run's span.
+    // Awaiting guarantees the span is registered before the body runs, making
+    // context propagation (and thus HTTP/`fetch` span nesting) deterministic.
+    this.awaitHandlers = true;
   }
 
   name = "OpenTelemetryLangChainTracer";

@@ -135,6 +135,16 @@ describe("LangChainTracer", () => {
       const lct = new LangChainTracer(tracer);
       assert.strictEqual(lct.name, "OpenTelemetryLangChainTracer");
     });
+
+    it("forces awaitHandlers so span creation is not backgrounded", () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      assert.strictEqual(
+        (lct as unknown as { awaitHandlers: boolean }).awaitHandlers,
+        true,
+        "awaitHandlers must be true so the run's span exists before wrapRunExecution runs",
+      );
+    });
   });
 
   describe("onRunCreate / startTracing", () => {
