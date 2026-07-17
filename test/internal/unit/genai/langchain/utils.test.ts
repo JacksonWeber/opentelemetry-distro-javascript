@@ -1140,13 +1140,28 @@ describe("shouldCaptureContent", () => {
     assert.strictEqual(shouldCaptureContent(false), true);
   });
 
-  it("returns true for SPAN_ONLY and the boolean true form", () => {
+  it("accepts SPAN_ONLY and is case-insensitive, but rejects boolean/whitespace/unknown forms", () => {
     clearEnv();
     process.env[SEMCONV_ENV] = "http/dup,gen_ai_latest_experimental";
+
+    // Span-capturing modes accepted (case-insensitive, matching Python's upper()).
     process.env[CONTENT_ENV] = "SPAN_ONLY";
     assert.strictEqual(shouldCaptureContent(false), true);
-    process.env[CONTENT_ENV] = "true";
+    process.env[CONTENT_ENV] = "span_and_event";
     assert.strictEqual(shouldCaptureContent(false), true);
+
+    // Boolean form is NOT a valid ContentCapturingMode — must hide content.
+    process.env[CONTENT_ENV] = "true";
+    assert.strictEqual(shouldCaptureContent(false), false);
+
+    // Value is not trimmed (Python does ContentCapturingMode[value.upper()]),
+    // so whitespace-padded modes are invalid and hide content.
+    process.env[CONTENT_ENV] = " SPAN_ONLY ";
+    assert.strictEqual(shouldCaptureContent(false), false);
+
+    // Unknown values hide content.
+    process.env[CONTENT_ENV] = "EVENT_ONLY";
+    assert.strictEqual(shouldCaptureContent(false), false);
   });
 
   it("returns false when experimental mode is opted in but content capture is off", () => {

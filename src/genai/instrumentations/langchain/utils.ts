@@ -67,17 +67,22 @@ function isExperimentalMode(): boolean {
 
 /**
  * Whether span-level content capture is enabled via
- * `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`. Accepts the OTel
- * content-capturing modes that include span capture (`SPAN_ONLY`,
- * `SPAN_AND_EVENT`) as well as the boolean `true` form.
+ * `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
+ *
+ * Only the OTel GenAI content-capturing modes that include span capture are
+ * accepted: `SPAN_ONLY` and `SPAN_AND_EVENT`. Matching upstream parsing
+ * (`ContentCapturingMode[value.upper()]`), comparison is case-insensitive but
+ * the value is NOT trimmed and boolean forms (e.g. `true`) are not accepted —
+ * any other value (including `NO_CONTENT`, `EVENT_ONLY`, whitespace-padded, or
+ * unknown) hides content.
  */
 function isSpanContentCaptureEnabledByEnv(): boolean {
   const raw = process.env[CONTENT_CAPTURE_ENV_VAR];
   if (!raw) {
     return false;
   }
-  const value = raw.trim().toLowerCase();
-  return value === "true" || value === "span_only" || value === "span_and_event";
+  const value = raw.toUpperCase();
+  return value === "SPAN_ONLY" || value === "SPAN_AND_EVENT";
 }
 
 /**
