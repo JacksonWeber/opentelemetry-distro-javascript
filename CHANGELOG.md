@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Features Added
-- Add top-level `enableSensitiveData` option to capture GenAI message content (prompts, completions, tool arguments/results, system instructions) for LangChain; content is hidden by default and can also be enabled via the OTel GenAI content-capture environment variables
+- Add top-level `enableSensitiveData` option to capture GenAI message content (prompts, completions, tool arguments/results, system instructions) for LangChain; content is hidden by default
 
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`

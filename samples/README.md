@@ -98,13 +98,6 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
-Alternatively, enable content capture without code changes via the standard OpenTelemetry GenAI environment variables (the `enableSensitiveData` option takes precedence over these):
-
-```bash
-OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
-OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT   # or SPAN_ONLY
-```
-
 > **Note:** `enableSensitiveData` defaults to `false`. Only enable it in trusted, non-production environments where capturing message content is intentional. This setting currently applies to LangChain instrumentation.
 
 [basicconnection]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/basicConnection.ts

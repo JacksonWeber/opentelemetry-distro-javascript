@@ -43,76 +43,6 @@ export function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-// ---- Content capture gating --------------------------------------------------
-
-const CONTENT_CAPTURE_ENV_VAR = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
-const SEMCONV_STABILITY_ENV_VAR = "OTEL_SEMCONV_STABILITY_OPT_IN";
-const GEN_AI_EXPERIMENTAL_OPT_IN = "gen_ai_latest_experimental";
-
-/**
- * Whether the OTel GenAI experimental semantic conventions are opted in via
- * `OTEL_SEMCONV_STABILITY_OPT_IN` (comma-separated, containing
- * `gen_ai_latest_experimental`).
- *
- * Matches upstream parsing (`[s.strip() for s in opt_in.split(",")]` with an
- * exact comparison against the lowercase mode value): each token is trimmed but
- * NOT lowercased, so the opt-in is case-sensitive — only the exact lowercase
- * `gen_ai_latest_experimental` enables experimental mode.
- */
-function isExperimentalMode(): boolean {
-  const raw = process.env[SEMCONV_STABILITY_ENV_VAR];
-  if (!raw) {
-    return false;
-  }
-  return raw
-    .split(",")
-    .map((token) => token.trim())
-    .includes(GEN_AI_EXPERIMENTAL_OPT_IN);
-}
-
-/**
- * Whether span-level content capture is enabled via
- * `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
- *
- * Only the OTel GenAI content-capturing modes that include span capture are
- * accepted: `SPAN_ONLY` and `SPAN_AND_EVENT`. Matching upstream parsing
- * (`ContentCapturingMode[value.upper()]`), comparison is case-insensitive but
- * the value is NOT trimmed and boolean forms (e.g. `true`) are not accepted —
- * any other value (including `NO_CONTENT`, `EVENT_ONLY`, whitespace-padded, or
- * unknown) hides content.
- */
-function isSpanContentCaptureEnabledByEnv(): boolean {
-  const raw = process.env[CONTENT_CAPTURE_ENV_VAR];
-  if (!raw) {
-    return false;
-  }
-  const value = raw.toUpperCase();
-  return value === "SPAN_ONLY" || value === "SPAN_AND_EVENT";
-}
-
-/**
- * Decide whether sensitive GenAI message content (prompts, completions, tool
- * arguments/results, system instructions) should be captured on span
- * attributes.
- *
- * - When `enableSensitiveData` is `true`, content is always captured. This
- *   takes precedence over the environment variables.
- * - Otherwise content is captured only when the experimental GenAI semantic
- *   conventions are opted in (`OTEL_SEMCONV_STABILITY_OPT_IN`) AND span content
- *   capture is enabled via `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
- *
- * Defaults to `false` so sensitive data is hidden unless explicitly enabled.
- */
-export function shouldCaptureContent(enableSensitiveData = false): boolean {
-  if (enableSensitiveData) {
-    return true;
-  }
-  if (!isExperimentalMode()) {
-    return false;
-  }
-  return isSpanContentCaptureEnabledByEnv();
-}
-
 // Operation type mapping
 export function getOperationType(run: Run): string {
   let operation = "unknown";
@@ -156,7 +86,7 @@ export function setToolAttributes(run: Run, span: Span, captureContent = false) 
   }
 
   // Tool arguments and result are sensitive message content — only recorded
-  // when content capture is enabled (see shouldCaptureContent).
+  // when content capture is enabled (`captureContent`, i.e. enableSensitiveData).
   if (captureContent) {
     if (run.inputs) {
       const argsValue = run.inputs?.input ?? run.inputs;

@@ -185,7 +185,7 @@ useMicrosoftOpenTelemetry({
 
 > **Capturing GenAI message content (`enableSensitiveData`)**
 >
-> LangChain instrumentation hides sensitive message content — prompts, completions, tool arguments/results, and system instructions — by default. Set the top-level `enableSensitiveData: true` to record it. This takes precedence over the OTel GenAI content-capture environment variables (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` combined with `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`), which can enable content capture without the flag. Only enable content capture in trusted, non-production environments where capturing message content is intentional.
+> LangChain instrumentation hides sensitive message content, prompts, completions, tool arguments/results, and system instructions, by default. Set the top-level `enableSensitiveData: true` to record it. Only enable content capture in trusted, non-production environments where capturing message content is intentional.
 
 Disable most built-in auto-instrumentation:
 

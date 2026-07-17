@@ -56,11 +56,9 @@ export interface MicrosoftOpenTelemetryOptions {
    * tool arguments/results, and system instructions — on spans. Defaults to
    * `false`.
    *
-   * When `true`, content is captured for LangChain instrumentation regardless
-   * of the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` /
-   * `OTEL_SEMCONV_STABILITY_OPT_IN` environment variables (this flag takes
-   * precedence over them). Only enable in trusted, non-production environments
-   * where capturing message content is intentional.
+   * When `true`, content is captured for LangChain instrumentation. Only enable
+   * in trusted, non-production environments where capturing message content is
+   * intentional.
    */
   enableSensitiveData?: boolean;
 }

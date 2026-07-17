@@ -32,18 +32,17 @@ type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: nu
  *   unmapped run types) to avoid noisy traces.
  * - Guards against unbounded memory with a hard cap of {@link MAX_RUNS}.
  * - Content attributes (messages, tool args/results, system instructions) are
- *   only recorded when content capture is enabled — either via
- *   `enableSensitiveData` or the OTel GenAI content-capture environment
- *   variables (see {@link Utils.shouldCaptureContent}). Sensitive data is
- *   hidden by default.
+ *   only recorded when {@link enableSensitiveData} is enabled. Sensitive data
+ *   is hidden by default.
  */
 export class LangChainTracer extends BaseTracer {
   /** Hard cap on concurrent tracked runs to prevent memory leaks. */
   private static readonly MAX_RUNS = 10_000;
   private tracer: Tracer;
   /**
-   * When true, sensitive message content is captured on spans regardless of the
-   * OTel GenAI content-capture environment variables.
+   * When true, sensitive message content (prompts, completions, tool
+   * arguments/results, system instructions) is captured on spans. Hidden by
+   * default.
    */
   private enableSensitiveData: boolean;
   /** Active runs keyed by LangChain run ID. */
@@ -235,11 +234,10 @@ export class LangChainTracer extends BaseTracer {
       Utils.setTokenAttributes(run, span);
 
       // Content attributes (messages, tool args/results, system instructions)
-      // are sensitive and only recorded when content capture is enabled —
-      // either via `enableSensitiveData` or the OTel GenAI content-capture
-      // environment variables. Non-content tool attributes (name, type, call
-      // id) are always set by setToolAttributes.
-      const captureContent = Utils.shouldCaptureContent(this.enableSensitiveData);
+      // are sensitive and only recorded when `enableSensitiveData` is set.
+      // Non-content tool attributes (name, type, call id) are always set by
+      // setToolAttributes.
+      const captureContent = this.enableSensitiveData;
       Utils.setToolAttributes(run, span, captureContent);
       if (captureContent) {
         Utils.setInputMessagesAttribute(run, span);
