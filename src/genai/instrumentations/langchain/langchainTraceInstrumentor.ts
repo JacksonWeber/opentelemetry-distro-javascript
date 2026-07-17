@@ -219,13 +219,23 @@ export function addTracerToHandlers(
   }
 
   if (Array.isArray(handlers)) {
-    if (!handlers.some((h) => h instanceof tracerCtor)) {
+    const existing = handlers.find((h) => h instanceof tracerCtor) as LangChainTracer | undefined;
+    if (existing) {
+      // Reconcile an already-attached tracer with the latest config so the flag
+      // never goes stale across re-instrumentation.
+      existing.setEnableSensitiveData(enableSensitiveData);
+    } else {
       handlers.push(new tracerCtor(tracer, enableSensitiveData));
     }
     return handlers;
   }
 
-  if (!handlers.inheritableHandlers.some((h) => h instanceof tracerCtor)) {
+  const existing = handlers.inheritableHandlers.find((h) => h instanceof tracerCtor) as
+    | LangChainTracer
+    | undefined;
+  if (existing) {
+    existing.setEnableSensitiveData(enableSensitiveData);
+  } else {
     handlers.addHandler(new tracerCtor(tracer, enableSensitiveData), true);
   }
   return handlers;

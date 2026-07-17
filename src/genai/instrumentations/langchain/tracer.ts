@@ -57,6 +57,15 @@ export class LangChainTracer extends BaseTracer {
     this.enableSensitiveData = enableSensitiveData;
   }
 
+  /**
+   * Update whether sensitive message content is captured on spans. Used to
+   * reconcile an already-attached tracer with the latest instrumentation
+   * configuration (e.g. on re-instrumentation) so the flag never goes stale.
+   */
+  setEnableSensitiveData(enableSensitiveData: boolean): void {
+    this.enableSensitiveData = enableSensitiveData;
+  }
+
   name = "OpenTelemetryLangChainTracer";
 
   protected persistRun(_run: Run): Promise<void> {

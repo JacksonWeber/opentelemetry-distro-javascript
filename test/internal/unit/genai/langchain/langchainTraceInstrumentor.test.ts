@@ -242,4 +242,52 @@ describe("addTracerToHandlers", () => {
       false,
     );
   });
+
+  it("reconciles enableSensitiveData on an existing array tracer instead of duplicating", () => {
+    const tracer = createMockTracer();
+    const existingTracer = new LangChainTracer(tracer, false);
+    const handlers = [existingTracer] as any;
+
+    const result = addTracerToHandlers(tracer, handlers, LangChainTracer, true);
+
+    assert.strictEqual(result.length, 1, "should not duplicate");
+    assert.strictEqual(
+      (existingTracer as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+      true,
+      "existing tracer's flag should be updated to the latest value",
+    );
+  });
+
+  it("reconciles enableSensitiveData back to false on an existing array tracer", () => {
+    const tracer = createMockTracer();
+    const existingTracer = new LangChainTracer(tracer, true);
+    const handlers = [existingTracer] as any;
+
+    addTracerToHandlers(tracer, handlers, LangChainTracer, false);
+
+    assert.strictEqual(
+      (existingTracer as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+      false,
+      "existing tracer's flag should be reset to the latest value",
+    );
+  });
+
+  it("reconciles enableSensitiveData on an existing CallbackManager-style tracer", () => {
+    const tracer = createMockTracer();
+    const existingTracer = new LangChainTracer(tracer, false);
+    const addHandlerSpy = vi.fn();
+    const handlers = {
+      inheritableHandlers: [existingTracer],
+      addHandler: addHandlerSpy,
+    } as any;
+
+    addTracerToHandlers(tracer, handlers, LangChainTracer, true);
+
+    assert.strictEqual(addHandlerSpy.mock.calls.length, 0, "should not add duplicate");
+    assert.strictEqual(
+      (existingTracer as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+      true,
+      "existing tracer's flag should be updated to the latest value",
+    );
+  });
 });
