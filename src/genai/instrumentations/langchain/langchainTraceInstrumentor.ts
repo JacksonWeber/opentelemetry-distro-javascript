@@ -14,7 +14,7 @@ import {
 import { LangChainTracer } from "./tracer.js";
 
 type CallbackManagerModuleType = typeof CallbackManagerModule;
-type LangChainTracerCtor = new (tracer: Tracer) => LangChainTracer;
+type LangChainTracerCtor = new (tracer: Tracer, enableSensitiveData?: boolean) => LangChainTracer;
 
 class LangChainTraceInstrumentorImpl extends InstrumentationBase<InstrumentationConfig> {
   private static _instance: LangChainTraceInstrumentorImpl | null = null;
@@ -29,6 +29,12 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
   // A static import is safe: by the time `patch()` runs, the callbacks
   // manager module is already loaded (it is the `module` argument).
   private _tracerCtor: LangChainTracerCtor = LangChainTracer;
+  /**
+   * When true, the attached {@link LangChainTracer} captures sensitive message
+   * content on spans regardless of the OTel GenAI content-capture environment
+   * variables.
+   */
+  private _enableSensitiveData = false;
 
   private constructor() {
     if (LangChainTraceInstrumentorImpl._instance !== null) {
@@ -102,7 +108,12 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
         this: CallbackManagerModuleType,
         ...args: Parameters<(typeof CallbackManager)["_configureSync"]>
       ) {
-        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], instrumentor._tracerCtor);
+        args[0] = addTracerToHandlers(
+          instrumentor.otelTracer,
+          args[0],
+          instrumentor._tracerCtor,
+          instrumentor._enableSensitiveData,
+        );
         diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
         return original.apply(this, args);
       };
@@ -113,7 +124,8 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
     return module;
   }
 
-  manuallyInstrumentImpl(module: CallbackManagerModuleType): void {
+  manuallyInstrumentImpl(module: CallbackManagerModuleType, enableSensitiveData = false): void {
+    this._enableSensitiveData = enableSensitiveData;
     diag.info("[LangChainTraceInstrumentor] Manually instrumenting CallbackManagerModule");
     this.patch(module);
   }
@@ -153,9 +165,19 @@ export class LangChainTraceInstrumentor {
    * Initialize and auto-instrument for LangChain
    * @param module The CallbackManager module to instrument
    * @param options Optional configuration options
+   * @param options.enableSensitiveData When true, sensitive message content
+   *   (prompts, completions, tool arguments/results, system instructions) is
+   *   captured on spans. Defaults to false. Only enable in trusted,
+   *   non-production environments.
    */
-  static instrument(module: CallbackManagerModuleType): void {
-    LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(module);
+  static instrument(
+    module: CallbackManagerModuleType,
+    options?: { enableSensitiveData?: boolean },
+  ): void {
+    LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(
+      module,
+      options?.enableSensitiveData ?? false,
+    );
   }
 
   /**
@@ -190,20 +212,21 @@ export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
   tracerCtor: LangChainTracerCtor,
+  enableSensitiveData = false,
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
-    return [new tracerCtor(tracer)];
+    return [new tracerCtor(tracer, enableSensitiveData)];
   }
 
   if (Array.isArray(handlers)) {
     if (!handlers.some((h) => h instanceof tracerCtor)) {
-      handlers.push(new tracerCtor(tracer));
+      handlers.push(new tracerCtor(tracer, enableSensitiveData));
     }
     return handlers;
   }
 
   if (!handlers.inheritableHandlers.some((h) => h instanceof tracerCtor)) {
-    handlers.addHandler(new tracerCtor(tracer), true);
+    handlers.addHandler(new tracerCtor(tracer, enableSensitiveData), true);
   }
   return handlers;
 }

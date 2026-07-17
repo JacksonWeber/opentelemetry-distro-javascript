@@ -80,6 +80,44 @@ describe("LangChainTraceInstrumentor", () => {
         "LangChainTracer should be attached on the first call, not deferred to a later microtask",
       );
     });
+
+    it("propagates enableSensitiveData to the attached LangChainTracer", () => {
+      const configureSyncOriginal = vi.fn();
+      const mockModule = {
+        CallbackManager: {
+          _configureSync: configureSyncOriginal,
+        },
+      };
+
+      LangChainTraceInstrumentor.instrument(mockModule as any, { enableSensitiveData: true });
+      mockModule.CallbackManager._configureSync(undefined as any);
+
+      const attached = configureSyncOriginal.mock.calls[0][0][0] as LangChainTracer;
+      assert.ok(attached instanceof LangChainTracer);
+      assert.strictEqual(
+        (attached as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+        true,
+        "the attached tracer should capture sensitive data",
+      );
+    });
+
+    it("defaults enableSensitiveData to false on the attached LangChainTracer", () => {
+      const configureSyncOriginal = vi.fn();
+      const mockModule = {
+        CallbackManager: {
+          _configureSync: configureSyncOriginal,
+        },
+      };
+
+      LangChainTraceInstrumentor.instrument(mockModule as any);
+      mockModule.CallbackManager._configureSync(undefined as any);
+
+      const attached = configureSyncOriginal.mock.calls[0][0][0] as LangChainTracer;
+      assert.strictEqual(
+        (attached as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+        false,
+      );
+    });
   });
 
   describe("enable / disable", () => {
@@ -184,5 +222,24 @@ describe("addTracerToHandlers", () => {
     const result = addTracerToHandlers(tracer, undefined, LangChainTracer);
     assert.ok(Array.isArray(result));
     assert.ok(result[0] instanceof LangChainTracer);
+  });
+
+  it("passes enableSensitiveData to the created LangChainTracer", () => {
+    const tracer = createMockTracer();
+    const result = addTracerToHandlers(tracer, undefined, LangChainTracer, true);
+    assert.ok(Array.isArray(result));
+    assert.strictEqual(
+      (result[0] as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+      true,
+    );
+  });
+
+  it("defaults enableSensitiveData to false when omitted", () => {
+    const tracer = createMockTracer();
+    const result = addTracerToHandlers(tracer, undefined, LangChainTracer);
+    assert.strictEqual(
+      (result[0] as unknown as { enableSensitiveData: boolean }).enableSensitiveData,
+      false,
+    );
   });
 });

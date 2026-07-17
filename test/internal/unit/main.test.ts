@@ -1461,7 +1461,35 @@ describe("Main functions", () => {
     });
 
     await vi.waitFor(() => {
-      expect(instrumentSpy).toHaveBeenCalledWith(expect.any(Object));
+      expect(instrumentSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ enableSensitiveData: false }),
+      );
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("forwards enableSensitiveData to LangChain instrumentation when set", async () => {
+    const instrumentSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      enableSensitiveData: true,
+      instrumentationOptions: {
+        openaiAgents: { enabled: false },
+        langchain: {
+          enabled: true,
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(instrumentSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ enableSensitiveData: true }),
+      );
     });
 
     await shutdownMicrosoftOpenTelemetry();

@@ -132,6 +132,7 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 | `azureMonitor`           | `AzureMonitorOpenTelemetryOptions` | —             | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
 | `a365`                   | `A365Options`                      | —             | A365 observability config                                                    |
 | `enableConsoleExporters` | `boolean`                          | auto          | Enable console exporters for traces, metrics, and logs                       |
+| `enableSensitiveData`    | `boolean`                          | `false`       | Capture GenAI message content (prompts, completions, tool args/results, system instructions) on LangChain spans. Only enable in trusted, non-production environments |
 
 ### `InstrumentationOptions`
 
@@ -162,6 +163,9 @@ Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 
 ```typescript
 useMicrosoftOpenTelemetry({
+  // Capture GenAI message content on LangChain spans (hidden by default).
+  // Only enable in trusted, non-production environments.
+  enableSensitiveData: true,
   instrumentationOptions: {
     // Disable specific built-in instrumentations
     http: { enabled: false },
@@ -174,11 +178,14 @@ useMicrosoftOpenTelemetry({
     },
     langchain: {
       enabled: true,
-      isContentRecordingEnabled: true,
     },
   },
 });
 ```
+
+> **Capturing GenAI message content (`enableSensitiveData`)**
+>
+> LangChain instrumentation hides sensitive message content — prompts, completions, tool arguments/results, and system instructions — by default. Set the top-level `enableSensitiveData: true` to record it. This takes precedence over the OTel GenAI content-capture environment variables (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` combined with `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`), which can enable content capture without the flag. Only enable content capture in trusted, non-production environments where capturing message content is intentional.
 
 Disable most built-in auto-instrumentation:
 

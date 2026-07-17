@@ -14,12 +14,17 @@ import type { Run } from "@langchain/core/tracers/base";
 import { LangChainTracer } from "../../../../../src/genai/instrumentations/langchain/tracer.js";
 import {
   ATTR_ERROR_MESSAGE,
+  ATTR_GEN_AI_INPUT_MESSAGES,
   ATTR_GEN_AI_OPERATION_NAME,
+  ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
+  ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+  ATTR_GEN_AI_TOOL_CALL_RESULT,
+  ATTR_GEN_AI_TOOL_NAME,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
 } from "../../../../../src/genai/index.js";
@@ -132,6 +137,116 @@ describe("LangChainTracer", () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);
       assert.strictEqual(lct.name, "OpenTelemetryLangChainTracer");
+    });
+  });
+
+  describe("enableSensitiveData content gating", () => {
+    const CONTENT_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
+    const SEMCONV_ENV = "OTEL_SEMCONV_STABILITY_OPT_IN";
+    const savedContent = process.env[CONTENT_ENV];
+    const savedSemconv = process.env[SEMCONV_ENV];
+
+    afterEach(() => {
+      if (savedContent === undefined) delete process.env[CONTENT_ENV];
+      else process.env[CONTENT_ENV] = savedContent;
+      if (savedSemconv === undefined) delete process.env[SEMCONV_ENV];
+      else process.env[SEMCONV_ENV] = savedSemconv;
+    });
+
+    function makeContentRun() {
+      return makeRun({
+        run_type: "llm",
+        name: "ChatOpenAI",
+        inputs: { messages: [[{ role: "user", content: "secret question" }]] },
+        outputs: { generations: [[{ text: "secret answer" }]] },
+      });
+    }
+
+    async function endTraceFor(lct: LangChainTracer, run: Run) {
+      await lct.onRunCreate(run);
+      await (lct as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(run);
+    }
+
+    it("hides input/output messages by default", async () => {
+      delete process.env[CONTENT_ENV];
+      delete process.env[SEMCONV_ENV];
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeContentRun();
+      await endTraceFor(lct, run);
+      const attrKeys = (tracer.lastSpan!.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      assert.ok(!attrKeys.includes(ATTR_GEN_AI_INPUT_MESSAGES), "input messages hidden");
+      assert.ok(!attrKeys.includes(ATTR_GEN_AI_OUTPUT_MESSAGES), "output messages hidden");
+    });
+
+    it("records input/output messages when enableSensitiveData is true", async () => {
+      delete process.env[CONTENT_ENV];
+      delete process.env[SEMCONV_ENV];
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer, true);
+      const run = makeContentRun();
+      await endTraceFor(lct, run);
+      const attrKeys = (tracer.lastSpan!.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_INPUT_MESSAGES), "input messages recorded");
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_OUTPUT_MESSAGES), "output messages recorded");
+    });
+
+    it("records message content when env vars opt in even without the flag", async () => {
+      process.env[SEMCONV_ENV] = "gen_ai_latest_experimental";
+      process.env[CONTENT_ENV] = "SPAN_AND_EVENT";
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeContentRun();
+      await endTraceFor(lct, run);
+      const attrKeys = (tracer.lastSpan!.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_INPUT_MESSAGES), "input messages recorded via env");
+    });
+
+    it("hides tool arguments/results by default but keeps tool name", async () => {
+      delete process.env[CONTENT_ENV];
+      delete process.env[SEMCONV_ENV];
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const run = makeRun({
+        run_type: "tool",
+        name: "search",
+        serialized: { name: "search" },
+        inputs: { input: "secret query" },
+        outputs: { output: { kwargs: { content: "secret result" }, tool_call_id: "tc-1" } },
+      });
+      await endTraceFor(lct, run);
+      const attrKeys = (tracer.lastSpan!.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_TOOL_NAME), "tool name always recorded");
+      assert.ok(!attrKeys.includes(ATTR_GEN_AI_TOOL_CALL_ARGUMENTS), "tool arguments hidden");
+      assert.ok(!attrKeys.includes(ATTR_GEN_AI_TOOL_CALL_RESULT), "tool result hidden");
+    });
+
+    it("records tool arguments/results when enableSensitiveData is true", async () => {
+      delete process.env[CONTENT_ENV];
+      delete process.env[SEMCONV_ENV];
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer, true);
+      const run = makeRun({
+        run_type: "tool",
+        name: "search",
+        serialized: { name: "search" },
+        inputs: { input: "secret query" },
+        outputs: { output: { kwargs: { content: "secret result" }, tool_call_id: "tc-1" } },
+      });
+      await endTraceFor(lct, run);
+      const attrKeys = (tracer.lastSpan!.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_TOOL_CALL_ARGUMENTS), "tool arguments recorded");
+      assert.ok(attrKeys.includes(ATTR_GEN_AI_TOOL_CALL_RESULT), "tool result recorded");
     });
   });
 
@@ -252,7 +367,7 @@ describe("LangChainTracer", () => {
       );
     });
 
-    it("sets content attributes (always recorded)", async () => {
+    it("sets non-content tool attributes (tool name) regardless of content capture", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);
       const run = makeRun({

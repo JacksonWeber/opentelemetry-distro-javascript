@@ -18,6 +18,7 @@ import {
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
   setTokenAttributes,
+  shouldCaptureContent,
   isString,
 } from "../../../../../src/genai/instrumentations/langchain/utils.js";
 import {
@@ -171,7 +172,7 @@ describe("setAgentAttributes", () => {
 });
 
 describe("setToolAttributes", () => {
-  it("sets tool attributes for tool runs", () => {
+  it("sets tool content attributes for tool runs when content capture is enabled", () => {
     const span = makeSpan();
     const run = makeRun({
       run_type: "tool",
@@ -185,7 +186,7 @@ describe("setToolAttributes", () => {
         },
       },
     });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"),
@@ -196,10 +197,43 @@ describe("setToolAttributes", () => {
     assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ID && c[1] === "tc-123"));
   });
 
+  it("omits tool arguments/results but keeps name/type/id when content capture is disabled", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      run_type: "tool",
+      name: "search_web",
+      serialized: { name: "search_web" },
+      inputs: { input: "query text" },
+      outputs: {
+        output: {
+          kwargs: { content: "result content" },
+          tool_call_id: "tc-123",
+        },
+      },
+    });
+    // captureContent defaults to false
+    setToolAttributes(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"),
+      "tool name should always be recorded",
+    );
+    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_TYPE && c[1] === "extension"));
+    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ID && c[1] === "tc-123"));
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ARGUMENTS),
+      "tool arguments (sensitive content) should be omitted",
+    );
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_RESULT),
+      "tool result (sensitive content) should be omitted",
+    );
+  });
+
   it("does nothing for non-tool runs", () => {
     const span = makeSpan();
     const run = makeRun({ run_type: "llm" });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 
@@ -209,7 +243,7 @@ describe("setToolAttributes", () => {
       run_type: "tool",
       serialized: undefined as unknown as Record<string, unknown>,
     });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });
@@ -1054,5 +1088,71 @@ describe("setTokenAttributes", () => {
     const run = makeRun({ outputs: {} });
     setTokenAttributes(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+});
+
+describe("shouldCaptureContent", () => {
+  const CONTENT_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
+  const SEMCONV_ENV = "OTEL_SEMCONV_STABILITY_OPT_IN";
+  // Snapshot the original values so each test can freely mutate them.
+  const savedContent = process.env[CONTENT_ENV];
+  const savedSemconv = process.env[SEMCONV_ENV];
+
+  function clearEnv() {
+    delete process.env[CONTENT_ENV];
+    delete process.env[SEMCONV_ENV];
+  }
+
+  afterEach(() => {
+    if (savedContent === undefined) delete process.env[CONTENT_ENV];
+    else process.env[CONTENT_ENV] = savedContent;
+    if (savedSemconv === undefined) delete process.env[SEMCONV_ENV];
+    else process.env[SEMCONV_ENV] = savedSemconv;
+  });
+
+  it("returns true when enableSensitiveData is true, regardless of env", () => {
+    clearEnv();
+    assert.strictEqual(shouldCaptureContent(true), true);
+  });
+
+  it("enableSensitiveData=true takes precedence even when env disables capture", () => {
+    clearEnv();
+    process.env[CONTENT_ENV] = "false";
+    assert.strictEqual(shouldCaptureContent(true), true);
+  });
+
+  it("defaults to false when neither the flag nor env vars are set", () => {
+    clearEnv();
+    assert.strictEqual(shouldCaptureContent(), false);
+    assert.strictEqual(shouldCaptureContent(false), false);
+  });
+
+  it("returns false when content capture env is set but experimental mode is not opted in", () => {
+    clearEnv();
+    process.env[CONTENT_ENV] = "SPAN_AND_EVENT";
+    assert.strictEqual(shouldCaptureContent(false), false);
+  });
+
+  it("returns true when experimental mode is opted in and content mode is SPAN_AND_EVENT", () => {
+    clearEnv();
+    process.env[SEMCONV_ENV] = "gen_ai_latest_experimental";
+    process.env[CONTENT_ENV] = "SPAN_AND_EVENT";
+    assert.strictEqual(shouldCaptureContent(false), true);
+  });
+
+  it("returns true for SPAN_ONLY and the boolean true form", () => {
+    clearEnv();
+    process.env[SEMCONV_ENV] = "http/dup,gen_ai_latest_experimental";
+    process.env[CONTENT_ENV] = "SPAN_ONLY";
+    assert.strictEqual(shouldCaptureContent(false), true);
+    process.env[CONTENT_ENV] = "true";
+    assert.strictEqual(shouldCaptureContent(false), true);
+  });
+
+  it("returns false when experimental mode is opted in but content capture is off", () => {
+    clearEnv();
+    process.env[SEMCONV_ENV] = "gen_ai_latest_experimental";
+    process.env[CONTENT_ENV] = "NO_CONTENT";
+    assert.strictEqual(shouldCaptureContent(false), false);
   });
 });

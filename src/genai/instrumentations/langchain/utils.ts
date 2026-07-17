@@ -43,6 +43,66 @@ export function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+// ---- Content capture gating --------------------------------------------------
+
+const CONTENT_CAPTURE_ENV_VAR = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
+const SEMCONV_STABILITY_ENV_VAR = "OTEL_SEMCONV_STABILITY_OPT_IN";
+const GEN_AI_EXPERIMENTAL_OPT_IN = "gen_ai_latest_experimental";
+
+/**
+ * Whether the OTel GenAI experimental semantic conventions are opted in via
+ * `OTEL_SEMCONV_STABILITY_OPT_IN` (comma-separated, containing
+ * `gen_ai_latest_experimental`).
+ */
+function isExperimentalMode(): boolean {
+  const raw = process.env[SEMCONV_STABILITY_ENV_VAR];
+  if (!raw) {
+    return false;
+  }
+  return raw
+    .split(",")
+    .map((token) => token.trim().toLowerCase())
+    .includes(GEN_AI_EXPERIMENTAL_OPT_IN);
+}
+
+/**
+ * Whether span-level content capture is enabled via
+ * `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`. Accepts the OTel
+ * content-capturing modes that include span capture (`SPAN_ONLY`,
+ * `SPAN_AND_EVENT`) as well as the boolean `true` form.
+ */
+function isSpanContentCaptureEnabledByEnv(): boolean {
+  const raw = process.env[CONTENT_CAPTURE_ENV_VAR];
+  if (!raw) {
+    return false;
+  }
+  const value = raw.trim().toLowerCase();
+  return value === "true" || value === "span_only" || value === "span_and_event";
+}
+
+/**
+ * Decide whether sensitive GenAI message content (prompts, completions, tool
+ * arguments/results, system instructions) should be captured on span
+ * attributes.
+ *
+ * - When `enableSensitiveData` is `true`, content is always captured. This
+ *   takes precedence over the environment variables.
+ * - Otherwise content is captured only when the experimental GenAI semantic
+ *   conventions are opted in (`OTEL_SEMCONV_STABILITY_OPT_IN`) AND span content
+ *   capture is enabled via `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
+ *
+ * Defaults to `false` so sensitive data is hidden unless explicitly enabled.
+ */
+export function shouldCaptureContent(enableSensitiveData = false): boolean {
+  if (enableSensitiveData) {
+    return true;
+  }
+  if (!isExperimentalMode()) {
+    return false;
+  }
+  return isSpanContentCaptureEnabledByEnv();
+}
+
 // Operation type mapping
 export function getOperationType(run: Run): string {
   let operation = "unknown";
@@ -73,7 +133,7 @@ export function setAgentAttributes(run: Run, span: Span) {
 }
 
 // Tool attributes
-export function setToolAttributes(run: Run, span: Span) {
+export function setToolAttributes(run: Run, span: Span, captureContent = false) {
   if (run.run_type !== "tool") {
     return;
   }
@@ -84,32 +144,39 @@ export function setToolAttributes(run: Run, span: Span) {
   if (isString(run.name)) {
     span.setAttribute(ATTR_GEN_AI_TOOL_NAME, run.name);
   }
-  if (run.inputs) {
-    const argsValue = run.inputs?.input ?? run.inputs;
-    span.setAttribute(
-      ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
-      safeSerializeToJson(
-        typeof argsValue === "object" ? (argsValue as Record<string, unknown>) : String(argsValue),
-        "arguments",
-      ),
-    );
-  }
 
-  // Tool result: v0 uses output.kwargs.content, v1 returns output as a plain string or has content directly
-  const toolResult =
-    run.outputs?.output?.kwargs?.content ??
-    (isString(run.outputs?.output) ? run.outputs.output : null) ??
-    run.outputs?.output?.content;
-  if (toolResult != null) {
-    span.setAttribute(
-      ATTR_GEN_AI_TOOL_CALL_RESULT,
-      safeSerializeToJson(
-        typeof toolResult === "object"
-          ? (toolResult as Record<string, unknown>)
-          : String(toolResult),
-        "result",
-      ),
-    );
+  // Tool arguments and result are sensitive message content — only recorded
+  // when content capture is enabled (see shouldCaptureContent).
+  if (captureContent) {
+    if (run.inputs) {
+      const argsValue = run.inputs?.input ?? run.inputs;
+      span.setAttribute(
+        ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+        safeSerializeToJson(
+          typeof argsValue === "object"
+            ? (argsValue as Record<string, unknown>)
+            : String(argsValue),
+          "arguments",
+        ),
+      );
+    }
+
+    // Tool result: v0 uses output.kwargs.content, v1 returns output as a plain string or has content directly
+    const toolResult =
+      run.outputs?.output?.kwargs?.content ??
+      (isString(run.outputs?.output) ? run.outputs.output : null) ??
+      run.outputs?.output?.content;
+    if (toolResult != null) {
+      span.setAttribute(
+        ATTR_GEN_AI_TOOL_CALL_RESULT,
+        safeSerializeToJson(
+          typeof toolResult === "object"
+            ? (toolResult as Record<string, unknown>)
+            : String(toolResult),
+          "result",
+        ),
+      );
+    }
   }
 
   span.setAttribute(ATTR_GEN_AI_TOOL_TYPE, "extension");
