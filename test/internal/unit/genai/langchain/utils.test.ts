@@ -1140,6 +1140,28 @@ describe("shouldCaptureContent", () => {
     assert.strictEqual(shouldCaptureContent(false), true);
   });
 
+  it("treats the semconv opt-in as case-sensitive and trims tokens (parity with upstream strip())", () => {
+    // Upstream parses `[s.strip() for s in opt_in.split(",")]` and matches the
+    // exact lowercase mode value, so it is case-sensitive.
+    process.env[CONTENT_ENV] = "SPAN_AND_EVENT";
+
+    // Exact lowercase token opts in.
+    process.env[SEMCONV_ENV] = "gen_ai_latest_experimental";
+    assert.strictEqual(shouldCaptureContent(false), true);
+
+    // Surrounding whitespace is stripped, so it still opts in.
+    process.env[SEMCONV_ENV] = " gen_ai_latest_experimental , http/dup ";
+    assert.strictEqual(shouldCaptureContent(false), true);
+
+    // Uppercase does NOT opt in (must hide content — matches Python).
+    process.env[SEMCONV_ENV] = "GEN_AI_LATEST_EXPERIMENTAL";
+    assert.strictEqual(shouldCaptureContent(false), false);
+
+    // Mixed case does NOT opt in either.
+    process.env[SEMCONV_ENV] = "Gen_AI_Latest_Experimental";
+    assert.strictEqual(shouldCaptureContent(false), false);
+  });
+
   it("accepts SPAN_ONLY and is case-insensitive, but rejects boolean/whitespace/unknown forms", () => {
     clearEnv();
     process.env[SEMCONV_ENV] = "http/dup,gen_ai_latest_experimental";

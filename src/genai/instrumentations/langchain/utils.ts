@@ -53,6 +53,11 @@ const GEN_AI_EXPERIMENTAL_OPT_IN = "gen_ai_latest_experimental";
  * Whether the OTel GenAI experimental semantic conventions are opted in via
  * `OTEL_SEMCONV_STABILITY_OPT_IN` (comma-separated, containing
  * `gen_ai_latest_experimental`).
+ *
+ * Matches upstream parsing (`[s.strip() for s in opt_in.split(",")]` with an
+ * exact comparison against the lowercase mode value): each token is trimmed but
+ * NOT lowercased, so the opt-in is case-sensitive — only the exact lowercase
+ * `gen_ai_latest_experimental` enables experimental mode.
  */
 function isExperimentalMode(): boolean {
   const raw = process.env[SEMCONV_STABILITY_ENV_VAR];
@@ -61,7 +66,7 @@ function isExperimentalMode(): boolean {
   }
   return raw
     .split(",")
-    .map((token) => token.trim().toLowerCase())
+    .map((token) => token.trim())
     .includes(GEN_AI_EXPERIMENTAL_OPT_IN);
 }
 
