@@ -21,6 +21,10 @@ async function main(): Promise<void> {
           process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
       },
     },
+    // Capture GenAI message content (prompts, completions, tool args/results,
+    // system instructions) on LangChain spans. Hidden by default — only enable
+    // in trusted, non-production environments.
+    enableSensitiveData: true,
     instrumentationOptions: {
       langchain: {
         enabled: true,

@@ -50,6 +50,17 @@ export interface MicrosoftOpenTelemetryOptions {
 
   /** Enable console exporters for traces, metrics, and logs. Auto-enabled when no other exporter is active. */
   enableConsoleExporters?: boolean;
+
+  /**
+   * Enable capture of sensitive GenAI message content — prompts, completions,
+   * tool arguments/results, and system instructions — on spans. Defaults to
+   * `false`.
+   *
+   * When `true`, content is captured for LangChain instrumentation. Only enable
+   * in trusted, non-production environments where capturing message content is
+   * intentional.
+   */
+  enableSensitiveData?: boolean;
 }
 
 /**

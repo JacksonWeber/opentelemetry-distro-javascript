@@ -73,7 +73,7 @@ export function setAgentAttributes(run: Run, span: Span) {
 }
 
 // Tool attributes
-export function setToolAttributes(run: Run, span: Span) {
+export function setToolAttributes(run: Run, span: Span, captureContent = false) {
   if (run.run_type !== "tool") {
     return;
   }
@@ -84,32 +84,39 @@ export function setToolAttributes(run: Run, span: Span) {
   if (isString(run.name)) {
     span.setAttribute(ATTR_GEN_AI_TOOL_NAME, run.name);
   }
-  if (run.inputs) {
-    const argsValue = run.inputs?.input ?? run.inputs;
-    span.setAttribute(
-      ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
-      safeSerializeToJson(
-        typeof argsValue === "object" ? (argsValue as Record<string, unknown>) : String(argsValue),
-        "arguments",
-      ),
-    );
-  }
 
-  // Tool result: v0 uses output.kwargs.content, v1 returns output as a plain string or has content directly
-  const toolResult =
-    run.outputs?.output?.kwargs?.content ??
-    (isString(run.outputs?.output) ? run.outputs.output : null) ??
-    run.outputs?.output?.content;
-  if (toolResult != null) {
-    span.setAttribute(
-      ATTR_GEN_AI_TOOL_CALL_RESULT,
-      safeSerializeToJson(
-        typeof toolResult === "object"
-          ? (toolResult as Record<string, unknown>)
-          : String(toolResult),
-        "result",
-      ),
-    );
+  // Tool arguments and result are sensitive message content — only recorded
+  // when content capture is enabled (`captureContent`, i.e. enableSensitiveData).
+  if (captureContent) {
+    if (run.inputs) {
+      const argsValue = run.inputs?.input ?? run.inputs;
+      span.setAttribute(
+        ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+        safeSerializeToJson(
+          typeof argsValue === "object"
+            ? (argsValue as Record<string, unknown>)
+            : String(argsValue),
+          "arguments",
+        ),
+      );
+    }
+
+    // Tool result: v0 uses output.kwargs.content, v1 returns output as a plain string or has content directly
+    const toolResult =
+      run.outputs?.output?.kwargs?.content ??
+      (isString(run.outputs?.output) ? run.outputs.output : null) ??
+      run.outputs?.output?.content;
+    if (toolResult != null) {
+      span.setAttribute(
+        ATTR_GEN_AI_TOOL_CALL_RESULT,
+        safeSerializeToJson(
+          typeof toolResult === "object"
+            ? (toolResult as Record<string, unknown>)
+            : String(toolResult),
+          "result",
+        ),
+      );
+    }
   }
 
   span.setAttribute(ATTR_GEN_AI_TOOL_TYPE, "extension");

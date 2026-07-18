@@ -171,7 +171,7 @@ describe("setAgentAttributes", () => {
 });
 
 describe("setToolAttributes", () => {
-  it("sets tool attributes for tool runs", () => {
+  it("sets tool content attributes for tool runs when content capture is enabled", () => {
     const span = makeSpan();
     const run = makeRun({
       run_type: "tool",
@@ -185,7 +185,7 @@ describe("setToolAttributes", () => {
         },
       },
     });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"),
@@ -196,10 +196,43 @@ describe("setToolAttributes", () => {
     assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ID && c[1] === "tc-123"));
   });
 
+  it("omits tool arguments/results but keeps name/type/id when content capture is disabled", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      run_type: "tool",
+      name: "search_web",
+      serialized: { name: "search_web" },
+      inputs: { input: "query text" },
+      outputs: {
+        output: {
+          kwargs: { content: "result content" },
+          tool_call_id: "tc-123",
+        },
+      },
+    });
+    // captureContent defaults to false
+    setToolAttributes(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"),
+      "tool name should always be recorded",
+    );
+    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_TYPE && c[1] === "extension"));
+    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ID && c[1] === "tc-123"));
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ARGUMENTS),
+      "tool arguments (sensitive content) should be omitted",
+    );
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_RESULT),
+      "tool result (sensitive content) should be omitted",
+    );
+  });
+
   it("does nothing for non-tool runs", () => {
     const span = makeSpan();
     const run = makeRun({ run_type: "llm" });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 
@@ -209,7 +242,7 @@ describe("setToolAttributes", () => {
       run_type: "tool",
       serialized: undefined as unknown as Record<string, unknown>,
     });
-    setToolAttributes(run, span);
+    setToolAttributes(run, span, true);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });

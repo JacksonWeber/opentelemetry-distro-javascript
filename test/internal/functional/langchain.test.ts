@@ -246,8 +246,45 @@ describe("LangChain Instrumentation Functional Tests", () => {
   });
 
   describe("content recording", () => {
-    it("always records message content", async () => {
+    it("hides message content by default (sensitive data hidden)", async () => {
       setup();
+
+      const run = makeRun({
+        id: "llm-no-content",
+        name: "ChatOpenAI",
+        run_type: "llm",
+        inputs: {
+          messages: [[{ role: "user", content: "What is 2+2?" }]],
+        },
+        outputs: {
+          generations: [[{ text: "4" }]],
+        },
+      });
+
+      await langchainTracer.onRunCreate(run);
+      await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(run);
+
+      const spans = exporter.getFinishedSpans();
+      assert.strictEqual(spans.length, 1);
+
+      const span = spans[0];
+      assert.ok(
+        !span.attributes[ATTR_GEN_AI_INPUT_MESSAGES],
+        "input messages should be hidden by default",
+      );
+      assert.ok(
+        !span.attributes[ATTR_GEN_AI_OUTPUT_MESSAGES],
+        "output messages should be hidden by default",
+      );
+    });
+
+    it("records message content when enableSensitiveData is true", async () => {
+      exporter = new InMemorySpanExporter();
+      provider = new BasicTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      });
+      const tracer = provider.getTracer("test-langchain", "1.0.0");
+      const sensitiveTracer = new LangChainTracer(tracer, true);
 
       const run = makeRun({
         id: "llm-with-content",
@@ -261,8 +298,8 @@ describe("LangChain Instrumentation Functional Tests", () => {
         },
       });
 
-      await langchainTracer.onRunCreate(run);
-      await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(run);
+      await sensitiveTracer.onRunCreate(run);
+      await (sensitiveTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(run);
 
       const spans = exporter.getFinishedSpans();
       assert.strictEqual(spans.length, 1);

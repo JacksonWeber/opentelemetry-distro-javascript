@@ -431,6 +431,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // unless explicitly disabled).
   initializeGenAIInstrumentations(
     applyA365Defaults ? config.instrumentationOptions : options?.instrumentationOptions,
+    options?.enableSensitiveData ?? false,
   );
 }
 
@@ -462,7 +463,10 @@ export function _getSdkInstance(): NodeSDK | undefined {
 // is never an error.  Here we eagerly import the optional @openai/agents and
 // @langchain/core packages, so we must tolerate them not being installed.
 // This will be migrated to upstream OTel instrumentation hooks once they are ready.
-function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
+function initializeGenAIInstrumentations(
+  options?: InstrumentationOptions,
+  enableSensitiveData = false,
+): void {
   const openAIOptions = options?.openaiAgents;
   if (openAIOptions?.enabled !== false) {
     void initializeOpenAIAgentsInstrumentation(openAIOptions ?? {});
@@ -470,7 +474,7 @@ function initializeGenAIInstrumentations(options?: InstrumentationOptions): void
 
   const langChainOptions = options?.langchain;
   if (langChainOptions?.enabled !== false) {
-    void initializeLangChainInstrumentation(langChainOptions ?? {});
+    void initializeLangChainInstrumentation(langChainOptions ?? {}, enableSensitiveData);
   }
 }
 
@@ -499,6 +503,7 @@ async function initializeOpenAIAgentsInstrumentation(
 
 async function initializeLangChainInstrumentation(
   _options: LangChainInstrumentationConfig,
+  enableSensitiveData = false,
 ): Promise<void> {
   try {
     const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
@@ -506,7 +511,7 @@ async function initializeLangChainInstrumentation(
       import("@langchain/core/callbacks/manager"),
     ]);
     if (isShutdown) return;
-    LangChainTraceInstrumentor.instrument(callbackManagerModule);
+    LangChainTraceInstrumentor.instrument(callbackManagerModule, { enableSensitiveData });
   } catch (error) {
     Logger.getInstance().debug(
       "[GenAI] Skipping LangChain instrumentation, @langchain/core is not installed.",

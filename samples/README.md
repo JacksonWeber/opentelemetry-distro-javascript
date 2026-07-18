@@ -22,7 +22,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [otlpExporter.ts][otlpexporter]             | Demonstrates how to enable the OTLP exporter alongside Azure Monitor to send telemetry to two locations. |
 | [redactQueryStrings.ts][redactquerystrings] | Demonstrates how to redact URL query strings from telemetry to protect sensitive information.            |
 | [sampling.ts][sampling]                     | Demonstrates how to enable sampling to reduce data ingestion volume and control costs.                   |
-| [langchainInstrumentation.ts][langchaininstrumentation] | Demonstrates how to enable LangChain instrumentation to trace GenAI operations.                     |
+| [langchainInstrumentation.ts][langchaininstrumentation] | Demonstrates how to enable LangChain instrumentation to trace GenAI operations, including the `enableSensitiveData` toggle for capturing message content. |
 | [openaiInstrumentation.ts][openaiinstrumentation]       | Demonstrates how to enable OpenAI Agents SDK instrumentation to trace GenAI operations.             |
 | [a365Export.ts][a365export]                 | Demonstrates A365 observability export: token resolver setup, dual export with Azure Monitor, and span routing by tenant/agent. |
 | [a365ManualScopes.ts][a365manualscopes]     | Traces a full agent turn with manual scopes (InvokeAgent → Inference → ExecuteTool → Inference → Output) and cross-service context propagation. |
@@ -77,6 +77,28 @@ Or pass the connection string directly:
 ```bash
 APPLICATIONINSIGHTS_CONNECTION_STRING="<your connection string>" node dist/basicConnection.js
 ```
+
+## Capturing GenAI message content (LangChain)
+
+By default, LangChain instrumentation **hides** sensitive GenAI message content — prompts, completions, tool call arguments/results, and system instructions — so telemetry carries only non-sensitive metadata (model, token counts, latency, tool names, etc.).
+
+[langchainInstrumentation.ts][langchaininstrumentation] demonstrates the `enableSensitiveData` toggle. Set the top-level option to record message content:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  // Hidden by default. Only enable in trusted, non-production environments
+  // where capturing message content is intentional.
+  enableSensitiveData: true,
+  azureMonitor: {
+    /* ... */
+  },
+  instrumentationOptions: {
+    langchain: { enabled: true },
+  },
+});
+```
+
+> **Note:** `enableSensitiveData` defaults to `false`. Only enable it in trusted, non-production environments where capturing message content is intentional. This setting currently applies to LangChain instrumentation.
 
 [basicconnection]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/basicConnection.ts
 [cloudrole]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/cloudRole.ts
