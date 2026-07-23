@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Emit `gen_ai.response.finish_reasons` on LangChain chat spans, extracted from the LLM run output
+
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
 
