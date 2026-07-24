@@ -1045,10 +1045,7 @@ describe("setFinishReasonsAttribute", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
-        generations: [
-          [{ generationInfo: {} }],
-          [{ generationInfo: { finish_reason: "length" } }],
-        ],
+        generations: [[{ generationInfo: {} }], [{ generationInfo: { finish_reason: "length" } }]],
       },
     });
     setFinishReasonsAttribute(run, span);
