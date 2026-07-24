@@ -30,7 +30,7 @@ import {
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
 import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
-import { MessageRole } from "../../../a365/contracts.js";
+import { MessageRole, FinishReason } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -648,7 +648,7 @@ export function getFinishReasons(run: Run): string[] | undefined {
 
       let reason: string | undefined;
       if (isString(native) && native.trim().length > 0) {
-        reason = native.trim();
+        reason = normalizeFinishReason(native);
       } else if (message) {
         reason = deriveResponsesFinishReason(message, responseMetadata);
       }
@@ -658,6 +658,27 @@ export function getFinishReasons(run: Run): string[] | undefined {
   }
 
   return reasons.length > 0 ? reasons : undefined;
+}
+
+// Map a provider-reported finish_reason string to the repo's GenAI
+// `FinishReason` contract value. OpenAI Chat Completions reports the plural
+// `finish_reason: "tool_calls"` (and the legacy `"function_call"`), but the
+// shared contract value is `"tool_call"` (see `FinishReason`, matched by the
+// Python distro's `messages.py`). Unrecognized values are passed through
+// trimmed so legitimate reasons are not dropped.
+const FINISH_REASON_ALIASES: Record<string, FinishReason> = {
+  stop: FinishReason.STOP,
+  length: FinishReason.LENGTH,
+  content_filter: FinishReason.CONTENT_FILTER,
+  tool_call: FinishReason.TOOL_CALL,
+  tool_calls: FinishReason.TOOL_CALL,
+  function_call: FinishReason.TOOL_CALL,
+  error: FinishReason.ERROR,
+};
+
+function normalizeFinishReason(value: string): string {
+  const trimmed = value.trim();
+  return FINISH_REASON_ALIASES[trimmed.toLowerCase()] ?? trimmed;
 }
 
 // Map a Responses status/incomplete_details to a Chat-Completions-style reason.
@@ -670,28 +691,28 @@ function deriveResponsesFinishReason(
 
   switch (status) {
     case "completed":
-      return messageHasToolCalls(message) ? "tool_calls" : "stop";
+      return messageHasToolCalls(message) ? FinishReason.TOOL_CALL : FinishReason.STOP;
     case "incomplete": {
       const incompleteDetails = responseMetadata?.incomplete_details as
         | Record<string, unknown>
         | undefined;
       const detailReason = incompleteDetails?.reason;
-      if (detailReason === "max_output_tokens") return "length";
-      if (detailReason === "content_filter") return "content_filter";
-      return isString(detailReason) && detailReason.trim().length > 0
-        ? detailReason.trim()
-        : "incomplete";
+      if (detailReason === "max_output_tokens") return FinishReason.LENGTH;
+      if (detailReason === "content_filter") return FinishReason.CONTENT_FILTER;
+      // No conformant mapping for this status; omit rather than emit a
+      // non-standard finish-reason value.
+      return undefined;
     }
     case "failed":
     case "cancelled":
-      return "error";
+      return FinishReason.ERROR;
     default:
       return undefined;
   }
 }
 
 // Any tool calls present, including malformed ones (invalid_tool_calls still
-// map to "tool_calls" in Chat Completions).
+// count as a tool call, mapped to the "tool_call" contract value).
 function messageHasToolCalls(message: Record<string, unknown>): boolean {
   for (const key of ["tool_calls", "invalid_tool_calls"]) {
     const candidates = [

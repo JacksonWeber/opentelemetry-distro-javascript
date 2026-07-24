@@ -951,7 +951,7 @@ describe("setFinishReasonsAttribute", () => {
     assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["length"]);
   });
 
-  it("extracts finish reason from response_metadata nested under kwargs (v0)", () => {
+  it("normalizes provider finish_reason 'tool_calls' to the contract value 'tool_call' (v0)", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -961,7 +961,7 @@ describe("setFinishReasonsAttribute", () => {
       },
     });
     setFinishReasonsAttribute(run, span);
-    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_calls"]);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
   });
 
   it("prefers generationInfo.finish_reason over response_metadata when both are present", () => {
@@ -1023,7 +1023,7 @@ describe("setFinishReasonsAttribute", () => {
     assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
   });
 
-  it("derives 'tool_calls' from Responses API status 'completed' when the message has tool calls", () => {
+  it("derives 'tool_call' from Responses API status 'completed' when the message has tool calls", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -1040,10 +1040,10 @@ describe("setFinishReasonsAttribute", () => {
       },
     });
     setFinishReasonsAttribute(run, span);
-    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_calls"]);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
   });
 
-  it("derives 'tool_calls' from Responses API status 'completed' when the message has invalid tool calls", () => {
+  it("derives 'tool_call' from Responses API status 'completed' when the message has invalid tool calls", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -1060,10 +1060,10 @@ describe("setFinishReasonsAttribute", () => {
       },
     });
     setFinishReasonsAttribute(run, span);
-    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_calls"]);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
   });
 
-  it("derives 'tool_calls' when an empty direct tool_calls array masks nested kwargs tool calls", () => {
+  it("derives 'tool_call' when an empty direct tool_calls array masks nested kwargs tool calls", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -1081,7 +1081,7 @@ describe("setFinishReasonsAttribute", () => {
       },
     });
     setFinishReasonsAttribute(run, span);
-    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_calls"]);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
   });
 
   it("derives 'length' from Responses API incomplete_details.reason 'max_output_tokens'", () => {
@@ -1128,6 +1128,39 @@ describe("setFinishReasonsAttribute", () => {
     });
     setFinishReasonsAttribute(run, span);
     assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["content_filter"]);
+  });
+
+  it("omits the finish reason when Responses API status is 'incomplete' with a missing/blank reason", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  status: "incomplete",
+                  incomplete_details: { reason: "" },
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("derives 'error' from Responses API status 'failed'", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { status: "failed" } } }]],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["error"]);
   });
 
   it("prefers a native finish_reason over the Responses API status derivation", () => {
