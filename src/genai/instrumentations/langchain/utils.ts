@@ -632,6 +632,7 @@ export function getFinishReasons(run: Run): string[] | undefined {
   for (const choice of generations) {
     if (!Array.isArray(choice)) continue;
     for (const item of choice as Record<string, unknown>[]) {
+      if (!item || typeof item !== "object") continue;
       const message = item?.message as Record<string, unknown> | undefined;
       const messageKwargs = message?.kwargs as Record<string, unknown> | undefined;
       const responseMetadata =
@@ -639,21 +640,33 @@ export function getFinishReasons(run: Run): string[] | undefined {
         (messageKwargs?.response_metadata as Record<string, unknown> | undefined);
       const generationInfo = item?.generationInfo as Record<string, unknown> | undefined;
 
-      // Native Chat Completions finish_reason (preferred).
-      const native =
-        generationInfo?.finish_reason ??
-        responseMetadata?.finish_reason ??
-        message?.finish_reason ??
-        messageKwargs?.finish_reason;
-
+      // Native Chat Completions finish_reason (preferred). Pick the first
+      // non-blank string candidate; a blank/non-string value in an earlier
+      // source must not mask a valid later one (so `??` is not sufficient).
       let reason: string | undefined;
-      if (isString(native) && native.trim().length > 0) {
-        reason = normalizeFinishReason(native);
-      } else if (message) {
+      for (const candidate of [
+        generationInfo?.finish_reason,
+        responseMetadata?.finish_reason,
+        message?.finish_reason,
+        messageKwargs?.finish_reason,
+      ]) {
+        if (isString(candidate) && candidate.trim().length > 0) {
+          reason = normalizeFinishReason(candidate);
+          break;
+        }
+      }
+
+      // Responses API derivation (no native finish_reason field).
+      if (!reason && message) {
         reason = deriveResponsesFinishReason(message, responseMetadata);
       }
 
-      if (reason) reasons.push(reason);
+      // `gen_ai.response.finish_reasons` is positional and must correspond 1:1
+      // with the received generations. OTel string arrays cannot hold gaps, so
+      // if any generation lacks a valid reason, omit the attribute entirely
+      // rather than emit a compacted/misaligned array.
+      if (!reason) return undefined;
+      reasons.push(reason);
     }
   }
 

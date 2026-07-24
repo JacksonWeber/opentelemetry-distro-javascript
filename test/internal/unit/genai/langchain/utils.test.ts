@@ -1005,6 +1005,56 @@ describe("setFinishReasonsAttribute", () => {
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 
+  it("falls back to response_metadata.finish_reason when generationInfo.finish_reason is blank", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              generationInfo: { finish_reason: "" },
+              message: { response_metadata: { finish_reason: "length" } },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["length"]);
+  });
+
+  it("falls back to response_metadata.finish_reason when generationInfo.finish_reason is non-string", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              generationInfo: { finish_reason: 42 },
+              message: { response_metadata: { finish_reason: "stop" } },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
+  });
+
+  it("omits the attribute when any generation lacks a valid finish reason (avoids positional misalignment)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ generationInfo: {} }],
+          [{ generationInfo: { finish_reason: "length" } }],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
   it("does nothing when no finish reason is found", () => {
     const span = makeSpan();
     const run = makeRun();
