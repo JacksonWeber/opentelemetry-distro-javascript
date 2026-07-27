@@ -15,6 +15,7 @@ import {
   setChoiceCountAttribute,
   setProviderNameAttribute,
   setResponseIdAttribute,
+  setFinishReasonsAttribute,
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
   setTokenAttributes,
@@ -29,6 +30,7 @@ import {
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
   ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
@@ -925,6 +927,306 @@ describe("setResponseIdAttribute", () => {
     const run = makeRun();
     setResponseIdAttribute(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+});
+
+describe("setFinishReasonsAttribute", () => {
+  it("extracts finish reason from generationInfo (Chat Completions API)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ generationInfo: { finish_reason: "stop" } }]] },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
+  });
+
+  it("extracts finish reason from response_metadata (v1, top-level)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { finish_reason: "length" } } }]],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["length"]);
+  });
+
+  it("normalizes provider finish_reason 'tool_calls' to the contract value 'tool_call' (v0)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { finish_reason: "tool_calls" } } } }],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
+  });
+
+  it("prefers generationInfo.finish_reason over response_metadata when both are present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              generationInfo: { finish_reason: "stop" },
+              message: { response_metadata: { finish_reason: "length" } },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
+  });
+
+  it("collects one reason per generation when n > 1", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ generationInfo: { finish_reason: "stop" } }],
+          [{ generationInfo: { finish_reason: "length" } }],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop", "length"]);
+  });
+
+  it("ignores non-string finish reason values", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ generationInfo: { finish_reason: 42 } }]] },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("falls back to response_metadata.finish_reason when generationInfo.finish_reason is blank", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              generationInfo: { finish_reason: "" },
+              message: { response_metadata: { finish_reason: "length" } },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["length"]);
+  });
+
+  it("falls back to response_metadata.finish_reason when generationInfo.finish_reason is non-string", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              generationInfo: { finish_reason: 42 },
+              message: { response_metadata: { finish_reason: "stop" } },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
+  });
+
+  it("omits the attribute when any generation lacks a valid finish reason (avoids positional misalignment)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ generationInfo: {} }], [{ generationInfo: { finish_reason: "length" } }]],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("does nothing when no finish reason is found", () => {
+    const span = makeSpan();
+    const run = makeRun();
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("derives 'stop' from Responses API status 'completed' (no native finish_reason)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { status: "completed" } } }]],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
+  });
+
+  it("derives 'tool_call' from Responses API status 'completed' when the message has tool calls", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: { status: "completed" },
+                tool_calls: [{ id: "call_1", name: "get_weather", args: {} }],
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
+  });
+
+  it("derives 'tool_call' from Responses API status 'completed' when the message has invalid tool calls", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: { status: "completed" },
+                invalid_tool_calls: [{ name: "broken", args: "not-json" }],
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
+  });
+
+  it("derives 'tool_call' when an empty direct tool_calls array masks nested kwargs tool calls", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: { status: "completed" },
+                tool_calls: [],
+                kwargs: { tool_calls: [{ id: "call_1", name: "get_weather", args: {} }] },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["tool_call"]);
+  });
+
+  it("derives 'length' from Responses API incomplete_details.reason 'max_output_tokens'", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  status: "incomplete",
+                  incomplete_details: { reason: "max_output_tokens" },
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["length"]);
+  });
+
+  it("derives 'content_filter' from Responses API incomplete_details.reason 'content_filter'", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                kwargs: {
+                  response_metadata: {
+                    status: "incomplete",
+                    incomplete_details: { reason: "content_filter" },
+                  },
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["content_filter"]);
+  });
+
+  it("omits the finish reason when Responses API status is 'incomplete' with a missing/blank reason", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  status: "incomplete",
+                  incomplete_details: { reason: "" },
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("derives 'error' from Responses API status 'failed'", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { status: "failed" } } }]],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["error"]);
+  });
+
+  it("prefers a native finish_reason over the Responses API status derivation", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: { finish_reason: "stop", status: "incomplete" },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setFinishReasonsAttribute(run, span);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_FINISH_REASONS], ["stop"]);
   });
 });
 

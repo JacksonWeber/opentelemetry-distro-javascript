@@ -14,6 +14,7 @@ import {
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
   ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
@@ -29,7 +30,7 @@ import {
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
 import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
-import { MessageRole } from "../../../a365/contracts.js";
+import { MessageRole, FinishReason } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -615,6 +616,133 @@ export function setResponseIdAttribute(run: Run, span: Span): void {
   const responseId = getResponseId(run);
   if (responseId) {
     span.setAttribute(ATTR_GEN_AI_RESPONSE_ID, responseId);
+  }
+}
+
+// Finish reasons - one per generation, parallel to n. Chat Completions:
+// generationInfo/response_metadata.finish_reason. Responses API: derived from
+// status/incomplete_details (no finish_reason field).
+export function getFinishReasons(run: Run): string[] | undefined {
+  const generations = run.outputs?.generations;
+  if (!Array.isArray(generations)) {
+    return undefined;
+  }
+
+  const reasons: string[] = [];
+  for (const choice of generations) {
+    if (!Array.isArray(choice)) continue;
+    for (const item of choice as Record<string, unknown>[]) {
+      if (!item || typeof item !== "object") continue;
+      const message = item?.message as Record<string, unknown> | undefined;
+      const messageKwargs = message?.kwargs as Record<string, unknown> | undefined;
+      const responseMetadata =
+        (message?.response_metadata as Record<string, unknown> | undefined) ??
+        (messageKwargs?.response_metadata as Record<string, unknown> | undefined);
+      const generationInfo = item?.generationInfo as Record<string, unknown> | undefined;
+
+      // Native Chat Completions finish_reason (preferred). Pick the first
+      // non-blank string candidate; a blank/non-string value in an earlier
+      // source must not mask a valid later one (so `??` is not sufficient).
+      let reason: string | undefined;
+      for (const candidate of [
+        generationInfo?.finish_reason,
+        responseMetadata?.finish_reason,
+        message?.finish_reason,
+        messageKwargs?.finish_reason,
+      ]) {
+        if (isString(candidate) && candidate.trim().length > 0) {
+          reason = normalizeFinishReason(candidate);
+          break;
+        }
+      }
+
+      // Responses API derivation (no native finish_reason field).
+      if (!reason && message) {
+        reason = deriveResponsesFinishReason(message, responseMetadata);
+      }
+
+      // `gen_ai.response.finish_reasons` is positional and must correspond 1:1
+      // with the received generations. OTel string arrays cannot hold gaps, so
+      // if any generation lacks a valid reason, omit the attribute entirely
+      // rather than emit a compacted/misaligned array.
+      if (!reason) return undefined;
+      reasons.push(reason);
+    }
+  }
+
+  return reasons.length > 0 ? reasons : undefined;
+}
+
+// Map a provider-reported finish_reason string to the repo's GenAI
+// `FinishReason` contract value. OpenAI Chat Completions reports the plural
+// `finish_reason: "tool_calls"` (and the legacy `"function_call"`), but the
+// shared contract value is `"tool_call"` (see `FinishReason`, matched by the
+// Python distro's `messages.py`). Unrecognized values are passed through
+// trimmed so legitimate reasons are not dropped.
+const FINISH_REASON_ALIASES: Record<string, FinishReason> = {
+  stop: FinishReason.STOP,
+  length: FinishReason.LENGTH,
+  content_filter: FinishReason.CONTENT_FILTER,
+  tool_call: FinishReason.TOOL_CALL,
+  tool_calls: FinishReason.TOOL_CALL,
+  function_call: FinishReason.TOOL_CALL,
+  error: FinishReason.ERROR,
+};
+
+function normalizeFinishReason(value: string): string {
+  const trimmed = value.trim();
+  return FINISH_REASON_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
+// Map a Responses status/incomplete_details to a Chat-Completions-style reason.
+function deriveResponsesFinishReason(
+  message: Record<string, unknown>,
+  responseMetadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const status = responseMetadata?.status;
+  if (!isString(status)) return undefined;
+
+  switch (status) {
+    case "completed":
+      return messageHasToolCalls(message) ? FinishReason.TOOL_CALL : FinishReason.STOP;
+    case "incomplete": {
+      const incompleteDetails = responseMetadata?.incomplete_details as
+        | Record<string, unknown>
+        | undefined;
+      const detailReason = incompleteDetails?.reason;
+      if (detailReason === "max_output_tokens") return FinishReason.LENGTH;
+      if (detailReason === "content_filter") return FinishReason.CONTENT_FILTER;
+      // No conformant mapping for this status; omit rather than emit a
+      // non-standard finish-reason value.
+      return undefined;
+    }
+    case "failed":
+    case "cancelled":
+      return FinishReason.ERROR;
+    default:
+      return undefined;
+  }
+}
+
+// Any tool calls present, including malformed ones (invalid_tool_calls still
+// count as a tool call, mapped to the "tool_call" contract value).
+function messageHasToolCalls(message: Record<string, unknown>): boolean {
+  for (const key of ["tool_calls", "invalid_tool_calls"]) {
+    const candidates = [
+      getNestedValue(message, key),
+      getNestedValue(message, "lc_kwargs", key),
+      getNestedValue(message, "kwargs", key),
+    ];
+    if (candidates.some((calls) => Array.isArray(calls) && calls.length > 0)) return true;
+  }
+  return false;
+}
+
+// Set gen_ai.response.finish_reasons when any reason is available.
+export function setFinishReasonsAttribute(run: Run, span: Span): void {
+  const finishReasons = getFinishReasons(run);
+  if (finishReasons) {
+    span.setAttribute(ATTR_GEN_AI_RESPONSE_FINISH_REASONS, finishReasons);
   }
 }
 
