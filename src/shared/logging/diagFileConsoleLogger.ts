@@ -16,6 +16,11 @@ import {
   unlinkAsync,
 } from "../../utils/index.js";
 
+// Capture console.log at module load, before the console instrumentation patches it,
+// so distro diagnostics are never captured as customer telemetry (which would recurse)
+// and always reach the real console regardless of patch/unpatch cycles.
+const originalConsoleLog: (...args: any[]) => void = console.log.bind(console);
+
 export class DiagFileConsoleLogger implements DiagLogger {
   private _TAG = "DiagFileConsoleLogger:";
   private _cleanupTimeOut = 60 * 30 * 1000; // 30 minutes;
@@ -129,11 +134,16 @@ export class DiagFileConsoleLogger implements DiagLogger {
         await this._storeToDisk(args);
       }
       if (this._logToConsole) {
-        console.log(...args);
+        this._writeToConsole(...args);
       }
     } catch (err: any) {
-      console.log(this._TAG, `Failed to log to file: ${err && err.message}`);
+      this._writeToConsole(this._TAG, `Failed to log to file: ${err && err.message}`);
     }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _writeToConsole(...args: any[]): void {
+    originalConsoleLog(...args);
   }
 
   /**
@@ -204,7 +214,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     try {
       await confirmDirExists(this._tempDir);
     } catch (err: any) {
-      console.log(this._TAG, `Failed to create directory for log file: ${err && err.message}`);
+      this._writeToConsole(
+        this._TAG,
+        `Failed to create directory for log file: ${err && err.message}`,
+      );
       return;
     }
     try {
@@ -214,7 +227,7 @@ export class DiagFileConsoleLogger implements DiagLogger {
       try {
         await appendFileAsync(this._fileFullPath, data);
       } catch (appendError: any) {
-        console.log(
+        this._writeToConsole(
           this._TAG,
           `Failed to put log into file: ${appendError && appendError.message}`,
         );
@@ -236,7 +249,7 @@ export class DiagFileConsoleLogger implements DiagLogger {
       const backupPath = path.join(this._tempDir, `${new Date().getTime()}.${this._logFileName}`);
       await writeFileAsync(backupPath, buffer);
     } catch (err: any) {
-      console.log("Failed to generate backup log file", err);
+      this._writeToConsole(this._TAG, "Failed to generate backup log file", err);
     } finally {
       // Store logs
       await writeFileAsync(this._fileFullPath, data);
@@ -265,7 +278,7 @@ export class DiagFileConsoleLogger implements DiagLogger {
         await unlinkAsync(pathToDelete);
       }
     } catch (err: any) {
-      console.log(this._TAG, `Failed to cleanup log files: ${err && err.message}`);
+      this._writeToConsole(this._TAG, `Failed to cleanup log files: ${err && err.message}`);
     }
   }
 }

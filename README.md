@@ -139,7 +139,7 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 Most instrumentations use `InstrumentationConfig` shape (`{ enabled?: boolean, ... }`).
 
 - Built-in infra instrumentations (`http`, `azureSdk`, `mongoDb`, `mySql`, `postgreSql`, `redis`, `redis4`) are enabled by default.
-- Logging instrumentations (`bunyan`, `winston`) are disabled by default.
+- Logging instrumentations (`bunyan`, `winston`, `console`) are disabled by default.
 - GenAI instrumentations (`openaiAgents`, `langchain`) are enabled by default.
 - When `a365.enabled` is `true`, non-GenAI instrumentations (`http`, `azureSdk`, DB/cache, and logging) are disabled by default unless explicitly set in `instrumentationOptions`.
 
@@ -156,6 +156,7 @@ Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 | `redis4`       | `InstrumentationConfig`             | enabled  | Redis 4 instrumentation                                       |
 | `bunyan`       | `InstrumentationConfig`             | disabled | Bunyan log instrumentation                                    |
 | `winston`      | `InstrumentationConfig`             | disabled | Winston log instrumentation                                   |
+| `console`      | `InstrumentationConfig`             | disabled | Console log instrumentation                                   |
 | `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | enabled  | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
 | `langchain`    | `LangChainInstrumentationConfig`    | enabled  | LangChain instrumentation (requires `@langchain/core`)        |
 

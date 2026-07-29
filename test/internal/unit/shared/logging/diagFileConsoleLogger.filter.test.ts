@@ -9,7 +9,6 @@ import { DiagFileConsoleLogger } from "../../../../../src/shared/logging/diagFil
 
 // These tests use real SDK diagnostics instead of fabricated log strings.
 describe("DiagFileConsoleLogger filtering", () => {
-  let originalConsoleLog: typeof console.log;
   let loggedMessages: any[];
   let originalEnv: NodeJS.ProcessEnv;
 
@@ -22,11 +21,17 @@ describe("DiagFileConsoleLogger filtering", () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    originalConsoleLog = console.log;
     loggedMessages = [];
-    console.log = vi.fn((...args: any[]) => {
-      loggedMessages.push(args);
-    });
+    // The logger writes console output through its private `_writeToConsole`
+    // helper (which uses the original console.log reference captured at module
+    // load, before the console instrumentation can patch it). Spy on that helper
+    // so we observe what the logger intends to write regardless of how the global
+    // `console` is (re)bound.
+    vi.spyOn(DiagFileConsoleLogger.prototype as any, "_writeToConsole").mockImplementation(
+      (...args: any[]) => {
+        loggedMessages.push(args);
+      },
+    );
     setDiagLogger();
     // Ignore any diagnostics emitted by setLogger itself
     loggedMessages.length = 0;
@@ -34,7 +39,6 @@ describe("DiagFileConsoleLogger filtering", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    console.log = originalConsoleLog;
     diag.disable();
     vi.restoreAllMocks();
   });

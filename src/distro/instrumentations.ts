@@ -22,6 +22,7 @@ import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
 import { RedisInstrumentation } from "@opentelemetry/instrumentation-redis";
 import { BunyanInstrumentation } from "@opentelemetry/instrumentation-bunyan";
 import { WinstonInstrumentation } from "@opentelemetry/instrumentation-winston";
+import { ConsoleInstrumentation } from "@opentelemetry/instrumentation-console";
 import type { Instrumentation } from "@opentelemetry/instrumentation";
 import type { ViewOptions } from "@opentelemetry/sdk-metrics";
 
@@ -106,6 +107,20 @@ export function createInstrumentations(
     instrumentations.push(
       new WinstonInstrumentation({
         ...config.instrumentationOptions.winston,
+        logSeverity: logLevelEnv ? logLevelToSeverityNumber(logLevelEnv) : undefined,
+      }),
+    );
+  }
+
+  if (config.instrumentationOptions.console?.enabled) {
+    instrumentations.push(
+      new ConsoleInstrumentation({
+        ...config.instrumentationOptions.console,
+        // Construct disabled so the SDK enables (patches) it once during registration.
+        // instrumentation-console records the original console methods on enable(); doing
+        // that in its constructor lets a field initializer wipe them so disable() can no
+        // longer restore console. Deferring the patch to registration avoids that.
+        enabled: false,
         logSeverity: logLevelEnv ? logLevelToSeverityNumber(logLevelEnv) : undefined,
       }),
     );
