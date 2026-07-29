@@ -163,4 +163,43 @@ describe("Library/DiagFileConsoleLogger", () => {
       );
     });
   });
+
+  describe("Unpatch-safe console output", () => {
+    beforeEach(() => {
+      logger = new DiagFileConsoleLogger();
+      logger["_logToFile"] = false;
+      logger["_logToConsole"] = true;
+    });
+
+    it("should bypass a patched console.log so distro diagnostics are not captured as telemetry", async () => {
+      // Simulate `@opentelemetry/instrumentation-console` patching the global
+      // console.log AFTER the diag logger module captured its original binding
+      // at import time. Diagnostic output must NOT flow through the patched
+      // console, otherwise it would be captured as customer log telemetry and
+      // recurse (diagnostics emitted during export trigger more exports).
+      const patched = vi.fn();
+      const realConsoleLog = console.log;
+
+      console.log = patched as unknown as typeof console.log;
+      try {
+        await logger["logMessage"]("diag-output");
+        expect(patched).not.toHaveBeenCalled();
+      } finally {
+        console.log = realConsoleLog;
+      }
+    });
+
+    it("should keep writing to console after the patch is removed (unpatch)", async () => {
+      const writeSpy = vi.spyOn(logger as any, "_writeToConsole").mockImplementation(() => {});
+      // Patch then unpatch, mirroring ConsoleInstrumentation enable()/disable().
+      const realConsoleLog = console.log;
+
+      console.log = vi.fn() as unknown as typeof console.log;
+
+      console.log = realConsoleLog;
+
+      await logger["logMessage"]("still-logging");
+      expect(writeSpy).toHaveBeenCalledWith("still-logging");
+    });
+  });
 });

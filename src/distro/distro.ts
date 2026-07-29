@@ -5,6 +5,7 @@ import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
+import type { Instrumentation } from "@opentelemetry/instrumentation";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
 import {
   type SpanProcessor,
@@ -60,6 +61,15 @@ let sdk: NodeSDK;
 let disposeAzureMonitor: (() => void) | undefined;
 let isShutdown = false;
 
+// The console instrumentation is the only one that patches the global `console`.
+// NodeSDK.shutdown() does not disable instrumentations, so we track it and disable it
+// ourselves on shutdown / re-init to restore console. It is constructed disabled and
+// enabled by the SDK during registration (see createInstrumentations), which lets its
+// own disable() correctly restore the original console methods.
+let consoleInstrumentation: Instrumentation | undefined;
+
+const CONSOLE_INSTRUMENTATION_NAME = "@opentelemetry/instrumentation-console";
+
 const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof InstrumentationOptions> = [
   "http",
   "azureSdk",
@@ -70,6 +80,7 @@ const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof Instrumenta
   "redis4",
   "bunyan",
   "winston",
+  "console",
 ];
 
 /**
@@ -218,6 +229,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   metrics.disable();
   trace.disable();
   logs.disable();
+  // Restore any console patch from a previous initialization before re-patching.
+  consoleInstrumentation?.disable();
+  consoleInstrumentation = undefined;
 
   // Clear the entire OpenTelemetry API global state to avoid version conflicts.
   // The disable() calls above remove individual providers but leave the `version` field
@@ -244,6 +258,11 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const instrumentations = createInstrumentations(config, {
     filterAzureMonitorRequests: azureMonitorEnabled,
   });
+  // The console instrumentation patches the global `console`, which NodeSDK.shutdown()
+  // does not restore; track it so we can disable it on shutdown / re-init.
+  consoleInstrumentation = instrumentations.find(
+    (instrumentation) => instrumentation.instrumentationName === CONSOLE_INSTRUMENTATION_NAME,
+  );
   const sampler = createSampler(config);
   const views: ViewOptions[] = createViews(config);
 
@@ -440,6 +459,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
  */
 export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
   isShutdown = true;
+  // Unpatch `console` — NodeSDK.shutdown() does not disable instrumentations.
+  consoleInstrumentation?.disable();
+  consoleInstrumentation = undefined;
   disposeAzureMonitor?.();
   const sdkShutdown = sdk?.shutdown() ?? Promise.resolve();
   return sdkShutdown

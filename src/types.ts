@@ -109,6 +109,8 @@ export interface InstrumentationOptions {
   bunyan?: InstrumentationConfig;
   /** Winston Instrumentation Config */
   winston?: InstrumentationConfig;
+  /** Console Instrumentation Config */
+  console?: InstrumentationConfig;
 
   // ── GenAI & agent framework instrumentations ──────────────────────
 

@@ -1551,4 +1551,103 @@ describe("Main functions", () => {
 
     await shutdownMicrosoftOpenTelemetry();
   });
+
+  describe("console instrumentation", () => {
+    it("patches the global console when enabled and restores it on shutdown (unpatch)", async () => {
+      const original = console.log;
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        instrumentationOptions: {
+          console: { enabled: true },
+          openaiAgents: { enabled: false },
+          langchain: { enabled: false },
+        },
+      });
+
+      expect(console.log).not.toBe(original);
+
+      await shutdownMicrosoftOpenTelemetry();
+      // Shutdown must unpatch console — NodeSDK.shutdown() does not do this on its own.
+
+      expect(console.log).toBe(original);
+    });
+
+    it("does not patch the global console when console instrumentation is disabled (default)", async () => {
+      const original = console.log;
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        instrumentationOptions: {
+          openaiAgents: { enabled: false },
+          langchain: { enabled: false },
+        },
+      });
+
+      expect(console.log).toBe(original);
+      await shutdownMicrosoftOpenTelemetry();
+    });
+
+    it("does not leak a stale console patch across re-initialization", async () => {
+      const original = console.log;
+      const options: MicrosoftOpenTelemetryOptions = {
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        instrumentationOptions: {
+          console: { enabled: true },
+          openaiAgents: { enabled: false },
+          langchain: { enabled: false },
+        },
+      };
+      useMicrosoftOpenTelemetry(options);
+
+      const firstPatch = console.log;
+      expect(firstPatch).not.toBe(original);
+
+      // Re-init should disable the previous console instrumentation (restoring
+      // console) before installing a fresh patch, so no double-patching occurs.
+      useMicrosoftOpenTelemetry(options);
+
+      const secondPatch = console.log;
+      expect(secondPatch).not.toBe(original);
+      expect(secondPatch).not.toBe(firstPatch);
+
+      await shutdownMicrosoftOpenTelemetry();
+      // A single disable must fully restore the original — proving there is only
+      // one active console patch, not a stack of them.
+
+      expect(console.log).toBe(original);
+    });
+
+    it("emits a log record when console.log is called with console instrumentation enabled", async () => {
+      const processor: LogRecordProcessor = {
+        forceFlush: () => Promise.resolve(),
+        onEmit(_logRecord: SdkLogRecord, _context?: Context) {
+          /* no-op */
+        },
+        shutdown: () => Promise.resolve(),
+      };
+      const onEmitSpy = vi.spyOn(processor, "onEmit");
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        logRecordProcessors: [processor],
+        instrumentationOptions: {
+          console: { enabled: true },
+          openaiAgents: { enabled: false },
+          langchain: { enabled: false },
+        },
+      });
+
+      console.log("console-instrumentation-emit-test");
+      expect(onEmitSpy).toHaveBeenCalled();
+      const emitted = onEmitSpy.mock.calls.some(
+        (call) =>
+          String((call[0] as SdkLogRecord).body).indexOf("console-instrumentation-emit-test") > -1,
+      );
+      expect(emitted).toBe(true);
+
+      await shutdownMicrosoftOpenTelemetry();
+    });
+  });
 });

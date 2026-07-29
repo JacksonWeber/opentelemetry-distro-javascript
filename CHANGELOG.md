@@ -5,6 +5,7 @@
 ### Features Added
 - Add top-level `enableSensitiveData` option to capture GenAI message content (prompts, completions, tool arguments/results, system instructions) for LangChain; content is hidden by default
 - Emit `gen_ai.response.finish_reasons` on LangChain chat spans, extracted from the LLM run output
+- Add console log collection via `@opentelemetry/instrumentation-console`; opt in with `instrumentationOptions: { console: { enabled: true } }` and filter by severity with `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL`
 
 ### Other Changes
 - Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
