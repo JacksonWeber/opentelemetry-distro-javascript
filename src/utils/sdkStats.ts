@@ -13,6 +13,7 @@ import {
   SdkStatsFeaturesMap,
   SdkStatsInstrumentation,
 } from "../types.js";
+import { removeNumberFlag } from "../azureMonitor/utils/common.js";
 
 let instance: SdkStatsConfiguration;
 
@@ -21,6 +22,16 @@ class SdkStatsConfiguration {
   private initializedByShim = false;
   private currentSdkStatsInstrumentations: SdkStatsInstrumentations = {};
   private currentSdkStatsFeatures: SdkStatsFeatures = {};
+
+  /**
+   * Removes features that describe the state of the current process from an inherited
+   * bit map. The AKS resource detector feature always reflects whether *this* process was
+   * able to read the AKS cluster metadata, so it must never be inherited from a seed set
+   * by a parent process, the shim, or a previous configuration.
+   */
+  private stripPerProcessFeatures(featureBitMap: number): number {
+    return removeNumberFlag(featureBitMap, SdkStatsFeature.AKS_RESOURCE_DETECTOR_POPULATION);
+  }
 
   constructor() {
     // Check for shim initialization upon construction
@@ -137,12 +148,12 @@ class SdkStatsConfiguration {
         const asNumber = Number(envValue);
         if (!isNaN(asNumber)) {
           // Plain number format (e.g. set by the shim)
-          featureBitMap |= asNumber;
+          featureBitMap |= this.stripPerProcessFeatures(asNumber);
         } else {
           // JSON format (e.g. set by a previous call to this function)
           const parsed = JSON.parse(envValue);
           if (parsed && typeof parsed.feature === "number") {
-            featureBitMap |= parsed.feature;
+            featureBitMap |= this.stripPerProcessFeatures(parsed.feature);
           }
         }
       }

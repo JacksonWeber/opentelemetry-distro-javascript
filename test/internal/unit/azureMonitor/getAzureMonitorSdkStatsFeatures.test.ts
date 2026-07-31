@@ -1,13 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { InternalConfig } from "../../../../src/shared/config.js";
 import { getAzureMonitorSdkStatsFeatures } from "../../../../src/azureMonitor/index.js";
 import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-conventions";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 
+const AKS_CLUSTER_RESOURCE_ID =
+  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/test-rg/providers/Microsoft.ContainerService/managedClusters/test-cluster";
+
 describe("getAzureMonitorSdkStatsFeatures", () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    originalEnv = process.env;
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
   it("should return browserSdkLoader true when enabled in config", () => {
     const config = new InternalConfig();
     config.browserSdkLoaderOptions.enabled = true;
@@ -56,13 +70,11 @@ describe("getAzureMonitorSdkStatsFeatures", () => {
     expect(features.diskRetry).toBe(false);
   });
 
-  it("should detect AKS resource when k8s.cluster.name attribute is present", () => {
-    const config = new InternalConfig();
-    config.resource = resourceFromAttributes({
-      [SEMRESATTRS_K8S_CLUSTER_NAME]: "my-cluster",
-    });
+  it("should detect AKS resource when the AKS resource detector populated the cluster resource ID", () => {
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    process.env.CLUSTER_RESOURCE_ID = AKS_CLUSTER_RESOURCE_ID;
 
-    const features = getAzureMonitorSdkStatsFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(new InternalConfig());
     expect(features.aksResourceDetectorPopulation).toBe(true);
   });
 
@@ -70,6 +82,42 @@ describe("getAzureMonitorSdkStatsFeatures", () => {
     const config = new InternalConfig();
 
     const features = getAzureMonitorSdkStatsFeatures(config);
+    expect(features.aksResourceDetectorPopulation).toBe(false);
+  });
+
+  it("should not detect AKS resource for a customer supplied k8s.cluster.name attribute", () => {
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    const config = new InternalConfig();
+    config.resource = resourceFromAttributes({
+      [SEMRESATTRS_K8S_CLUSTER_NAME]: "my-cluster",
+    });
+
+    const features = getAzureMonitorSdkStatsFeatures(config);
+    expect(features.aksResourceDetectorPopulation).toBe(false);
+  });
+
+  it("should not detect AKS resource in App Service, which also sets cloud.resource_id", () => {
+    process.env.WEBSITE_SITE_NAME = "testSiteName";
+    process.env.WEBSITE_OWNER_NAME =
+      "00000000-0000-0000-0000-000000000000+testResourceGroup-CentralUS";
+    process.env.WEBSITE_RESOURCE_GROUP = "testResourceGroup";
+
+    const features = getAzureMonitorSdkStatsFeatures(new InternalConfig());
+    expect(features.aksResourceDetectorPopulation).toBe(false);
+  });
+
+  it("should not detect AKS resource for a cluster resource ID that is not an AKS cluster", () => {
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    process.env.CLUSTER_RESOURCE_ID = "my-self-managed-cluster";
+
+    const features = getAzureMonitorSdkStatsFeatures(new InternalConfig());
+    expect(features.aksResourceDetectorPopulation).toBe(false);
+  });
+
+  it("should not detect AKS resource outside of a Kubernetes environment", () => {
+    process.env.CLUSTER_RESOURCE_ID = AKS_CLUSTER_RESOURCE_ID;
+
+    const features = getAzureMonitorSdkStatsFeatures(new InternalConfig());
     expect(features.aksResourceDetectorPopulation).toBe(false);
   });
 });
