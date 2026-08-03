@@ -13,7 +13,7 @@ import {
 import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { AlwaysOnSampler } from "@opentelemetry/sdk-trace-base";
 import type { Span } from "@opentelemetry/api";
-import { metrics, trace } from "@opentelemetry/api";
+import { metrics, trace, SpanKind } from "@opentelemetry/api";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import type { MockInstance } from "vitest";
 import {
@@ -280,8 +280,12 @@ describe("Library/TraceHandler", () => {
       );
       expect(spans.length).toBe(2);
       assert.deepStrictEqual(spans.length, 2);
-      const incoming = spans.find((span: ReadableSpan) => span.kind === 1) as ReadableSpan;
-      const outgoing = spans.find((span: ReadableSpan) => span.kind === 2) as ReadableSpan;
+      const incoming = spans.find(
+        (span: ReadableSpan) => span.kind === SpanKind.SERVER,
+      ) as ReadableSpan;
+      const outgoing = spans.find(
+        (span: ReadableSpan) => span.kind === SpanKind.CLIENT,
+      ) as ReadableSpan;
       // Incoming request
       assert.isDefined(incoming);
       assert.deepStrictEqual(incoming.name, "GET");
