@@ -93,8 +93,7 @@ export class OutputLoggingMiddleware implements MiddlewareLike {
       }
 
       const parentSpanRef = turnContext.turnState.get(A365_PARENT_SPAN_KEY) as
-        | ParentSpanRef
-        | undefined;
+        ParentSpanRef | undefined;
       if (!parentSpanRef) {
         Logger.getInstance().warn(
           `[OutputLoggingMiddleware] No parent span ref in turnState under '${A365_PARENT_SPAN_KEY}'. OutputScope will not be linked to a parent.`,

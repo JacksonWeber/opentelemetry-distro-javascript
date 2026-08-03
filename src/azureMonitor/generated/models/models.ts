@@ -118,12 +118,7 @@ export function documentIngressSerializer(item: DocumentIngress): any {
 
 /** Alias for DocumentIngressUnion */
 export type DocumentIngressUnion =
-  | Request
-  | RemoteDependency
-  | Exception
-  | Event
-  | Trace
-  | DocumentIngress;
+  Request | RemoteDependency | Exception | Event | Trace | DocumentIngress;
 
 export function documentIngressUnionSerializer(item: DocumentIngressUnion): any {
   switch (item.documentType) {
@@ -149,12 +144,7 @@ export function documentIngressUnionSerializer(item: DocumentIngressUnion): any 
 
 /** Document type */
 export type DocumentType =
-  | "Request"
-  | "RemoteDependency"
-  | "Exception"
-  | "Event"
-  | "Trace"
-  | "Unknown";
+  "Request" | "RemoteDependency" | "Exception" | "Event" | "Trace" | "Unknown";
 
 export function keyValuePairStringStringArraySerializer(
   result: Array<KeyValuePairStringString>,
@@ -624,13 +614,7 @@ export function documentFilterConjunctionGroupInfoDeserializer(
 
 /** Telemetry type. */
 export type TelemetryType =
-  | "Request"
-  | "Dependency"
-  | "Exception"
-  | "Event"
-  | "Metric"
-  | "PerformanceCounter"
-  | "Trace";
+  "Request" | "Dependency" | "Exception" | "Event" | "Metric" | "PerformanceCounter" | "Trace";
 
 /** Controls document quotas to be sent to Live Metrics. */
 export interface QuotaConfigurationInfo {

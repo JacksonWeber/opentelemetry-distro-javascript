@@ -2,13 +2,22 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-03
+
 ### Features Added
-- Add top-level `enableSensitiveData` option to capture GenAI message content (prompts, completions, tool arguments/results, system instructions) for LangChain; content is hidden by default
-- Emit `gen_ai.response.finish_reasons` on LangChain chat spans, extracted from the LLM run output
-- Add console log collection via `@opentelemetry/instrumentation-console`; opt in with `instrumentationOptions: { console: { enabled: true } }` and filter by severity with `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL`
+- Add top-level `enableSensitiveData` option to capture GenAI message content (prompts, completions, tool arguments/results, system instructions) for LangChain; content is hidden by default [#192](https://github.com/microsoft/opentelemetry-distro-javascript/pull/192)
+- Emit `gen_ai.response.finish_reasons` on LangChain chat spans, extracted from the LLM run output [#196](https://github.com/microsoft/opentelemetry-distro-javascript/pull/196)
+- Add console log collection via `@opentelemetry/instrumentation-console`; opt in with `instrumentationOptions: { console: { enabled: true } }` and filter by severity with `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL` [#206](https://github.com/microsoft/opentelemetry-distro-javascript/pull/206)
 
 ### Other Changes
-- Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION`
+- Remove the unused `AZURE_MONITOR_DISTRO_VERSION` env var and its constant; the distro reports its version via `MICROSOFT_OPENTELEMETRY_VERSION` [#188](https://github.com/microsoft/opentelemetry-distro-javascript/pull/188)
+- **HTTP spans now use stable HTTP semantic conventions only.** `@opentelemetry/instrumentation-http` `0.221.0` drops support for the old (v1.7.0) HTTP semconv and the `OTEL_SEMCONV_STABILITY_OPT_IN` opt-in. Spans now carry `http.request.method`, `http.response.status_code`, `url.full`, `url.path`, `url.scheme`, `server.address`, and `server.port` instead of `http.method`, `http.status_code`, `http.url`, `http.target`, `http.scheme`, `http.host`, and `net.*`. Azure Monitor request/dependency telemetry and Live Metrics are unaffected — the exporter and the distro read both sets of attributes — but custom span processors, samplers, or filters that read the old attribute names must be updated.
+- Bump `@azure/monitor-opentelemetry-exporter` floor to `1.0.0-beta.44`
+- Bump `@opentelemetry/*` core/SDK packages to `2.10.0` / `0.221.0` and instrumentation packages to their latest releases
+- Bump `@azure/*` core packages and promote `@azure/opentelemetry-instrumentation-azure-sdk` to `^1.0.0`
+- Adopt the object-based `BatchLogRecordProcessor` / `SimpleLogRecordProcessor` constructors introduced in `@opentelemetry/sdk-logs` `0.221.0`
+- Upgrade the ESLint toolchain to ESLint 10 (with an explicit `@eslint/js` dev dependency) to clear transitive `brace-expansion` advisories
+- Numerous Dependabot dependency bumps ([#193](https://github.com/microsoft/opentelemetry-distro-javascript/pull/193), [#194](https://github.com/microsoft/opentelemetry-distro-javascript/pull/194), [#195](https://github.com/microsoft/opentelemetry-distro-javascript/pull/195), [#197](https://github.com/microsoft/opentelemetry-distro-javascript/pull/197), [#198](https://github.com/microsoft/opentelemetry-distro-javascript/pull/198), [#199](https://github.com/microsoft/opentelemetry-distro-javascript/pull/199), [#200](https://github.com/microsoft/opentelemetry-distro-javascript/pull/200), [#201](https://github.com/microsoft/opentelemetry-distro-javascript/pull/201), [#202](https://github.com/microsoft/opentelemetry-distro-javascript/pull/202), [#203](https://github.com/microsoft/opentelemetry-distro-javascript/pull/203), [#204](https://github.com/microsoft/opentelemetry-distro-javascript/pull/204), [#205](https://github.com/microsoft/opentelemetry-distro-javascript/pull/205))
 
 ## [1.2.0] - 2026-07-02
 

@@ -13,7 +13,7 @@ import {
 import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { AlwaysOnSampler } from "@opentelemetry/sdk-trace-base";
 import type { Span } from "@opentelemetry/api";
-import { metrics, trace } from "@opentelemetry/api";
+import { metrics, trace, SpanKind } from "@opentelemetry/api";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import type { MockInstance } from "vitest";
 import {
@@ -269,72 +269,74 @@ describe("Library/TraceHandler", () => {
       await tracerProvider.forceFlush();
       expect(exportSpy).toHaveBeenCalled();
       // Filter spans to only those from our test request (with custom attributes from our customSpanProcessor)
+      // `@opentelemetry/instrumentation-http` >= 0.221.0 emits stable HTTP semantic
+      // conventions only: server spans carry `url.path`, client spans carry `url.full`.
       const allSpans = exportSpy.mock.calls.flatMap((call) => call[0]);
       const spans = allSpans.filter(
         (span: ReadableSpan) =>
           span.attributes["startAttribute"] === "SomeValue" &&
-          span.attributes["http.target"] === "/test",
+          (span.attributes["url.path"] === "/test" ||
+            span.attributes["url.full"] === `http://localhost:${mockHttpServerPort}/test`),
       );
       expect(spans.length).toBe(2);
       assert.deepStrictEqual(spans.length, 2);
+      const incoming = spans.find(
+        (span: ReadableSpan) => span.kind === SpanKind.SERVER,
+      ) as ReadableSpan;
+      const outgoing = spans.find(
+        (span: ReadableSpan) => span.kind === SpanKind.CLIENT,
+      ) as ReadableSpan;
       // Incoming request
-      assert.deepStrictEqual(spans[0].name, "GET");
+      assert.isDefined(incoming);
+      assert.deepStrictEqual(incoming.name, "GET");
       assert.deepStrictEqual(
-        spans[0].instrumentationScope.name,
+        incoming.instrumentationScope.name,
         "@opentelemetry/instrumentation-http",
       );
-      assert.deepStrictEqual(spans[0].kind, 1, "Span Kind");
-      assert.deepStrictEqual(spans[0].status.code, 0, "Span Success"); // Success
-      assert.isDefined(spans[0].startTime);
-      assert.isDefined(spans[0].endTime);
-      assert.deepStrictEqual(spans[0].attributes["http.host"], `localhost:${mockHttpServerPort}`);
-      assert.deepStrictEqual(spans[0].attributes["http.method"], "GET");
-      assert.deepStrictEqual(spans[0].attributes["http.status_code"], 200);
-      assert.deepStrictEqual(spans[0].attributes["http.status_text"], "OK");
-      assert.deepStrictEqual(spans[0].attributes["http.target"], "/test");
-      assert.deepStrictEqual(
-        spans[0].attributes["http.url"],
-        `http://localhost:${mockHttpServerPort}/test`,
-      );
-      assert.deepStrictEqual(spans[0].attributes["net.host.name"], "localhost");
-      assert.deepStrictEqual(spans[0].attributes["net.host.port"], mockHttpServerPort);
+      assert.deepStrictEqual(incoming.status.code, 0, "Span Success"); // Success
+      assert.isDefined(incoming.startTime);
+      assert.isDefined(incoming.endTime);
+      assert.deepStrictEqual(incoming.attributes["http.request.method"], "GET");
+      assert.deepStrictEqual(incoming.attributes["http.response.status_code"], 200);
+      assert.deepStrictEqual(incoming.attributes["url.path"], "/test");
+      assert.deepStrictEqual(incoming.attributes["url.scheme"], "http");
+      assert.deepStrictEqual(incoming.attributes["server.address"], "localhost");
+      assert.deepStrictEqual(incoming.attributes["server.port"], mockHttpServerPort);
       // Outgoing request
-      assert.deepStrictEqual(spans[1].name, "GET");
+      assert.isDefined(outgoing);
+      assert.deepStrictEqual(outgoing.name, "GET");
       assert.deepStrictEqual(
-        spans[1].instrumentationScope.name,
+        outgoing.instrumentationScope.name,
         "@opentelemetry/instrumentation-http",
       );
-      assert.deepStrictEqual(spans[1].kind, 2, "Span Kind");
-      assert.deepStrictEqual(spans[1].status.code, 0, "Span Success"); // Success
-      assert.isDefined(spans[1].startTime);
-      assert.isDefined(spans[1].endTime);
-      assert.deepStrictEqual(spans[1].attributes["http.host"], `localhost:${mockHttpServerPort}`);
-      assert.deepStrictEqual(spans[1].attributes["http.method"], "GET");
-      assert.deepStrictEqual(spans[1].attributes["http.status_code"], 200);
-      assert.deepStrictEqual(spans[1].attributes["http.status_text"], "OK");
-      assert.deepStrictEqual(spans[1].attributes["http.target"], "/test");
+      assert.deepStrictEqual(outgoing.status.code, 0, "Span Success"); // Success
+      assert.isDefined(outgoing.startTime);
+      assert.isDefined(outgoing.endTime);
+      assert.deepStrictEqual(outgoing.attributes["http.request.method"], "GET");
+      assert.deepStrictEqual(outgoing.attributes["http.response.status_code"], 200);
       assert.deepStrictEqual(
-        spans[1].attributes["http.url"],
+        outgoing.attributes["url.full"],
         `http://localhost:${mockHttpServerPort}/test`,
       );
-      assert.deepStrictEqual(spans[1].attributes["net.peer.name"], "localhost");
-      assert.notDeepEqual(spans[0].spanContext().spanId, spans[1].spanContext().spanId);
+      assert.deepStrictEqual(outgoing.attributes["server.address"], "localhost");
+      assert.deepStrictEqual(outgoing.attributes["server.port"], mockHttpServerPort);
+      assert.notDeepEqual(incoming.spanContext().spanId, outgoing.spanContext().spanId);
       // Incoming request
-      assert.deepStrictEqual(spans[0].attributes["startAttribute"], "SomeValue");
-      assert.deepStrictEqual(spans[0].attributes["endAttribute"], "SomeValue2");
+      assert.deepStrictEqual(incoming.attributes["startAttribute"], "SomeValue");
+      assert.deepStrictEqual(incoming.attributes["endAttribute"], "SomeValue2");
       // Outgoing request
-      assert.deepStrictEqual(spans[1].attributes["startAttribute"], "SomeValue");
-      assert.deepStrictEqual(spans[1].attributes["endAttribute"], "SomeValue2");
+      assert.deepStrictEqual(outgoing.attributes["startAttribute"], "SomeValue");
+      assert.deepStrictEqual(outgoing.attributes["endAttribute"], "SomeValue2");
 
       // Check if the spans are processed by the metric extractors
       // Incoming request
       assert.deepStrictEqual(
-        spans[0].attributes["_MS.ProcessedByMetricExtractors"],
+        incoming.attributes["_MS.ProcessedByMetricExtractors"],
         "(Name:'Requests', Ver:'1.1')",
       );
       // Outgoing request
       assert.deepStrictEqual(
-        spans[1].attributes["_MS.ProcessedByMetricExtractors"],
+        outgoing.attributes["_MS.ProcessedByMetricExtractors"],
         "(Name:'Dependencies', Ver:'1.1')",
       );
     });

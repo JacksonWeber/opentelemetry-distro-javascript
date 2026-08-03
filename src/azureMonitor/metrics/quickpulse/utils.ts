@@ -470,13 +470,11 @@ function createCustomDimsFromAttributes(
   const customDims = new Map<string, string>();
   if (attributes) {
     for (const key of Object.keys(attributes)) {
-      if (
-        !(
-          key.startsWith("_MS.") ||
-          legacySemanticValues.includes(key) ||
-          httpSemanticValues.includes(key as any)
-        )
-      ) {
+      if (!(
+        key.startsWith("_MS.") ||
+        legacySemanticValues.includes(key) ||
+        httpSemanticValues.includes(key as any)
+      )) {
         customDims.set(key, String(attributes[key]));
       }
     }

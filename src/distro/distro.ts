@@ -381,7 +381,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
         exportIntervalMillis: config.metricExportIntervalMillis,
       }),
     );
-    logRecordProcessors.push(new SimpleLogRecordProcessor(new ConsoleLogRecordExporter()));
+    logRecordProcessors.push(
+      new SimpleLogRecordProcessor({ exporter: new ConsoleLogRecordExporter() }),
+    );
     setSdkStatsFeature(SdkStatsDistroFeature.CONSOLE_EXPORT);
   }
 
