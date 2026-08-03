@@ -465,11 +465,9 @@ export function getRequestModel(run: Run): string | undefined {
 export function getResponseModel(run: Run): string | undefined {
   const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
   const v1Metadata = run.outputs?.generations?.[0]?.[0]?.message?.response_metadata as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const v0Metadata = run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   return [
     // v1: response_metadata directly on message. Prefer the canonical OpenAI
@@ -582,8 +580,7 @@ export function setChoiceCountAttribute(run: Run, span: Span) {
 // transport-level response identifier.
 export function getResponseId(run: Run): string | undefined {
   const message = run.outputs?.generations?.[0]?.[0]?.message as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const messageKwargs = message?.kwargs as Record<string, unknown> | undefined;
   const responseMetadata =
     (message?.response_metadata as Record<string, unknown> | undefined) ??
@@ -707,8 +704,7 @@ function deriveResponsesFinishReason(
       return messageHasToolCalls(message) ? FinishReason.TOOL_CALL : FinishReason.STOP;
     case "incomplete": {
       const incompleteDetails = responseMetadata?.incomplete_details as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       const detailReason = incompleteDetails?.reason;
       if (detailReason === "max_output_tokens") return FinishReason.LENGTH;
       if (detailReason === "content_filter") return FinishReason.CONTENT_FILTER;

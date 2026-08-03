@@ -231,8 +231,7 @@ export function addTracerToHandlers(
   }
 
   const existing = handlers.inheritableHandlers.find((h) => h instanceof tracerCtor) as
-    | LangChainTracer
-    | undefined;
+    LangChainTracer | undefined;
   if (existing) {
     existing.setEnableSensitiveData(enableSensitiveData);
   } else {

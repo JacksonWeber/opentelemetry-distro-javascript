@@ -58,7 +58,7 @@ export class ApplicationInsightsSampler implements Sampler {
     attributes: Attributes,
     _links: Link[],
   ): SamplingResult {
-    let isSampledIn = false;
+    let isSampledIn: boolean;
     if (this._sampleRate === 100) {
       isSampledIn = true;
     } else if (this._sampleRate === 0) {

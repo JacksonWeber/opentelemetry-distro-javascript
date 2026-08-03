@@ -135,11 +135,9 @@ export const insertBrowserSdkLoaderByIndex = (
   snippet: string,
 ): string | null => {
   if (index < 0) return null;
-  let newHtml = null;
   const subStart = html.substring(0, index);
   const subEnd = html.substring(index);
-  newHtml = subStart + '<script type="text/javascript">' + snippet + "</script>" + subEnd;
-  return newHtml;
+  return subStart + '<script type="text/javascript">' + snippet + "</script>" + subEnd;
 };
 
 export const isContentTypeHeaderHtml = (response: http.ServerResponse): boolean => {

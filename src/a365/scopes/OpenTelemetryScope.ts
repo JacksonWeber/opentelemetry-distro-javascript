@@ -167,10 +167,7 @@ export abstract class OpenTelemetryScope {
   /** Records multiple attribute key/value pairs. */
   public recordAttributes(
     attributes:
-      | Iterable<[string, AttributeValue]>
-      | Record<string, AttributeValue>
-      | null
-      | undefined,
+      Iterable<[string, AttributeValue]> | Record<string, AttributeValue> | null | undefined,
   ): void {
     if (!attributes) return;
 

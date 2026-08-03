@@ -146,7 +146,9 @@ export function createOtlpComponents(): OtlpComponents {
   // OTEL_EXPORTER_OTLP_HEADERS, OTEL_EXPORTER_OTLP_LOGS_HEADERS,
   // OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
   // OTEL_EXPORTER_OTLP_COMPRESSION, OTEL_EXPORTER_OTLP_LOGS_COMPRESSION
-  components.logRecordProcessor = new BatchLogRecordProcessor(new OTLPLogExporter());
+  components.logRecordProcessor = new BatchLogRecordProcessor({
+    exporter: new OTLPLogExporter(),
+  });
 
   return components;
 }

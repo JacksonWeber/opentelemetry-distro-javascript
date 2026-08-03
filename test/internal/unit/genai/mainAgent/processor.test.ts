@@ -209,7 +209,7 @@ describe("GenAIMainAgentLogRecordProcessor", () => {
     logProvider = new LoggerProvider({
       processors: [
         new GenAIMainAgentLogRecordProcessor(),
-        new SimpleLogRecordProcessor(memoryLogExporter),
+        new SimpleLogRecordProcessor({ exporter: memoryLogExporter }),
       ],
     });
     logsApi.setGlobalLoggerProvider(logProvider);
