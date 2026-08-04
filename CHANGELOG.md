@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- Stop emitting every `bunyan` and `winston` log record twice. `LogHandler` constructed a second `BunyanInstrumentation` / `WinstonInstrumentation`; `InstrumentationBase` auto-enables an instrumentation whose config has `enabled: true`, so that second copy patched the logging module and appended a second `OpenTelemetryBunyanStream` to every logger — even though `LogHandler.getInstrumentations()` was never registered with the `NodeSDK`. `createInstrumentations` is now the single owner of all instrumentations.
+- Report a real value for the `\Process(??APP_WIN32_PROC??)\% Processor Time Normalized` performance counter. It shared `lastAppCpuUsage` / `lastHrtime` / `lastCpusProcess` with the standard process time counter, so whichever observable callback ran second measured a near-zero delta and always reported `0`.
+- Report a real value on the first export of the `\ASP.NET Applications(??APP_W3SVC_PROC??)\Requests/Sec` and `\.NET CLR Exceptions(??APP_CLR_PROC??)\# of Exceps Thrown / sec` performance counters. `lastRequestRate` was re-initialized to `time: 0` after the constructor had already seeded it with the current time, making the first collection interval span decades and driving the computed rate to ~0.
+
 ## [1.3.0] - 2026-08-03
 
 ### Features Added

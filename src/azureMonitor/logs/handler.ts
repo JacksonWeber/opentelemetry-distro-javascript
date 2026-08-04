@@ -2,15 +2,11 @@
 // Licensed under the MIT License.
 
 import { AzureMonitorLogExporter } from "@azure/monitor-opentelemetry-exporter";
-import type { Instrumentation } from "@opentelemetry/instrumentation";
-import { BunyanInstrumentation } from "@opentelemetry/instrumentation-bunyan";
-import { WinstonInstrumentation } from "@opentelemetry/instrumentation-winston";
 import type { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { AzureLogRecordProcessor } from "./logRecordProcessor.js";
 import { AzureBatchLogRecordProcessor } from "./batchLogRecordProcessor.js";
-import { logLevelToSeverityNumber } from "../utils/logUtils.js";
 
 /**
  * Azure Monitor OpenTelemetry Log Handler
@@ -21,10 +17,16 @@ export class LogHandler {
   private _azureBatchLogRecordProcessor: AzureBatchLogRecordProcessor;
   private _metricHandler: MetricHandler;
   private _config: InternalConfig;
-  private _instrumentations: Instrumentation[];
 
   /**
    * Initializes a new instance of the LogHandler class.
+   *
+   * Log instrumentations (bunyan, winston, console) are not created here — they
+   * are created once by `createInstrumentations` and registered with the
+   * NodeSDK. Creating them here as well would enable a second copy of each
+   * instrumentation, which appends a second OpenTelemetry stream to every
+   * logger and duplicates each log record.
+   *
    * @param config - Microsoft OpenTelemetry configuration.
    * @param metricHandler - MetricHandler.
    */
@@ -36,8 +38,6 @@ export class LogHandler {
       enableTraceBasedSamplingForLogs: this._config.enableTraceBasedSamplingForLogs,
     });
     this._azureLogRecordProcessor = new AzureLogRecordProcessor(this._metricHandler);
-    this._instrumentations = [];
-    this._initializeInstrumentations();
   }
 
   public getAzureLogRecordProcessor(): AzureLogRecordProcessor {
@@ -46,33 +46,5 @@ export class LogHandler {
 
   public getBatchLogRecordProcessor(): BatchLogRecordProcessor {
     return this._azureBatchLogRecordProcessor;
-  }
-
-  public getInstrumentations(): Instrumentation[] {
-    return this._instrumentations;
-  }
-
-  /**
-   * Start auto collection of telemetry
-   */
-  private _initializeInstrumentations(): void {
-    const logLevelEnv = process.env.APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL;
-
-    if (this._config.instrumentationOptions.bunyan?.enabled) {
-      this._instrumentations.push(
-        new BunyanInstrumentation({
-          ...this._config.instrumentationOptions.bunyan,
-          logSeverity: logLevelEnv ? logLevelToSeverityNumber(logLevelEnv) : undefined,
-        }),
-      );
-    }
-    if (this._config.instrumentationOptions.winston?.enabled) {
-      this._instrumentations.push(
-        new WinstonInstrumentation({
-          ...this._config.instrumentationOptions.winston,
-          logSeverity: logLevelEnv ? logLevelToSeverityNumber(logLevelEnv) : undefined,
-        }),
-      );
-    }
   }
 }

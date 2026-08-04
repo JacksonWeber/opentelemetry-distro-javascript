@@ -8,6 +8,7 @@ import { ExportResultCode } from "@opentelemetry/core";
 import { LoggerProvider } from "@opentelemetry/sdk-logs";
 import { LogHandler } from "../../../../src/azureMonitor/logs/index.js";
 import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
+import { createInstrumentations } from "../../../../src/distro/instrumentations.js";
 import { InternalConfig } from "../../../../src/shared/index.js";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { SemanticAttributes } from "@opentelemetry/semantic-conventions";
@@ -165,13 +166,32 @@ describe("LogHandler", () => {
       config.instrumentationOptions.bunyan = {
         enabled: true,
       };
-      const logHandler = new LogHandler(config, metricHandler);
-      assert.isTrue(logHandler.getInstrumentations().length > 0, "Log instrumentations not added");
-      assert.strictEqual(
-        logHandler.getInstrumentations()[0].instrumentationName,
-        "@opentelemetry/instrumentation-bunyan",
+      const instrumentations = createInstrumentations(config);
+      assert.isDefined(
+        instrumentations.find(
+          (instrumentation) =>
+            instrumentation.instrumentationName === "@opentelemetry/instrumentation-bunyan",
+        ),
         "Bunyan instrumentation not added",
       );
+    });
+
+    it("should not create a second copy of the bunyan instrumentation", () => {
+      const config = new InternalConfig();
+      config.azureMonitorExporterOptions.connectionString =
+        "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
+      config.instrumentationOptions.bunyan = {
+        enabled: true,
+      };
+      // A second enabled BunyanInstrumentation appends another OpenTelemetry
+      // stream to every logger, which duplicates every log record.
+      const instrumentations = createInstrumentations(config);
+      const bunyanInstrumentations = instrumentations.filter(
+        (instrumentation) =>
+          instrumentation.instrumentationName === "@opentelemetry/instrumentation-bunyan",
+      );
+      assert.strictEqual(bunyanInstrumentations.length, 1);
+      assert.isUndefined((new LogHandler(config, metricHandler) as any).getInstrumentations);
     });
 
     it("should add winston instrumentation", () => {
@@ -181,11 +201,12 @@ describe("LogHandler", () => {
       config.instrumentationOptions.winston = {
         enabled: true,
       };
-      const logHandler = new LogHandler(config, metricHandler);
-      assert.isTrue(logHandler.getInstrumentations().length > 0, "Log instrumentations not added");
-      assert.strictEqual(
-        logHandler.getInstrumentations()[0].instrumentationName,
-        "@opentelemetry/instrumentation-winston",
+      const instrumentations = createInstrumentations(config);
+      assert.isDefined(
+        instrumentations.find(
+          (instrumentation) =>
+            instrumentation.instrumentationName === "@opentelemetry/instrumentation-winston",
+        ),
         "Winston instrumentation not added",
       );
     });
@@ -198,10 +219,12 @@ describe("LogHandler", () => {
       config.instrumentationOptions.bunyan = {
         enabled: true,
       };
-      const logHandler = new LogHandler(config, metricHandler);
+      const bunyanInstrumentation = createInstrumentations(config).find(
+        (instrumentation) =>
+          instrumentation.instrumentationName === "@opentelemetry/instrumentation-bunyan",
+      );
       assert.strictEqual(
-        (logHandler.getInstrumentations()[0].getConfig() as BunyanInstrumentationConfig)
-          .logSeverity,
+        (bunyanInstrumentation!.getConfig() as BunyanInstrumentationConfig).logSeverity,
         SeverityNumber.DEBUG,
       );
     });
@@ -214,10 +237,12 @@ describe("LogHandler", () => {
       config.instrumentationOptions.winston = {
         enabled: true,
       };
-      const logHandler = new LogHandler(config, metricHandler);
+      const winstonInstrumentation = createInstrumentations(config).find(
+        (instrumentation) =>
+          instrumentation.instrumentationName === "@opentelemetry/instrumentation-winston",
+      );
       assert.strictEqual(
-        (logHandler.getInstrumentations()[0].getConfig() as WinstonInstrumentationConfig)
-          .logSeverity,
+        (winstonInstrumentation!.getConfig() as WinstonInstrumentationConfig).logSeverity,
         SeverityNumber.ERROR,
       );
     });
