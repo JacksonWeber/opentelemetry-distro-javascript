@@ -5,7 +5,7 @@ import { TraceHandler } from "../../../../src/azureMonitor/traces/index.js";
 import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
 import { InternalConfig } from "../../../../src/shared/index.js";
 import { ApplicationInsightsSampler } from "../../../../src/azureMonitor/traces/sampler.js";
-import { createSampler } from "../../../../src/distro/instrumentations.js";
+import { createSampler, createInstrumentations } from "../../../../src/distro/instrumentations.js";
 import {
   HttpInstrumentation,
   type HttpInstrumentationConfig,
@@ -171,10 +171,13 @@ describe("Library/TraceHandler", () => {
     _config.instrumentationOptions.http = httpConfig;
     metricHandler = new MetricHandler(_config);
     handler = new TraceHandler(_config, metricHandler);
-    handler.getInstrumentations().forEach((instrumentation) => {
-      instrumentation.enable();
-      activeInstrumentations.push(instrumentation);
-    });
+    // Instrumentations are owned by createInstrumentations, not the handler.
+    createInstrumentations(_config, { filterAzureMonitorRequests: true }).forEach(
+      (instrumentation) => {
+        instrumentation.enable();
+        activeInstrumentations.push(instrumentation);
+      },
+    );
 
     // Because the instrumentation is registered globally, its config is not updated
     // when the handler is created. We need to mock the getConfig method to return
@@ -354,9 +357,22 @@ describe("Library/TraceHandler", () => {
       };
       metricHandler = new MetricHandler(_config);
       handler = new TraceHandler(_config, metricHandler);
-      const instrumentations = handler.getInstrumentations();
+      const instrumentations = createInstrumentations(_config);
       expect(instrumentations).toHaveLength(0);
       expect(instrumentations[0]).not.toBeInstanceOf(HttpInstrumentation);
+    });
+
+    it("the trace handler does not create instrumentations", () => {
+      // A second, enabled copy of an instrumentation that the SDK never wires
+      // up keeps a no-op meter and suppresses the HTTP duration metrics.
+      metricHandler = new MetricHandler(_config);
+      handler = new TraceHandler(_config, metricHandler);
+      const held = Object.values(handler as unknown as Record<string, unknown>)
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter(
+          (value) => typeof value === "object" && value !== null && "instrumentationName" in value,
+        );
+      expect(held).toEqual([]);
     });
   });
 });

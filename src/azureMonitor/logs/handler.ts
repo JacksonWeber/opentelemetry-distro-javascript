@@ -21,11 +21,12 @@ export class LogHandler {
   /**
    * Initializes a new instance of the LogHandler class.
    *
-   * Log instrumentations (bunyan, winston, console) are not created here — they
-   * are created once by `createInstrumentations` and registered with the
-   * NodeSDK. Creating them here as well would enable a second copy of each
-   * instrumentation, which appends a second OpenTelemetry stream to every
-   * logger and duplicates each log record.
+   * Log instrumentations are not created here — they are created once by
+   * `createInstrumentations` and registered with the NodeSDK. Creating them
+   * here as well left a second, enabled copy of each instrumentation that the
+   * SDK never wired up. For bunyan that is actively harmful: its instrumentation
+   * appends an `OpenTelemetryBunyanStream` every time it is enabled and never
+   * unwraps a previous patch, so every record was emitted twice.
    *
    * @param config - Microsoft OpenTelemetry configuration.
    * @param metricHandler - MetricHandler.

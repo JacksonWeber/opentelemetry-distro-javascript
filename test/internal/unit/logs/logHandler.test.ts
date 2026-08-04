@@ -183,15 +183,33 @@ describe("LogHandler", () => {
       config.instrumentationOptions.bunyan = {
         enabled: true,
       };
+      config.instrumentationOptions.winston = {
+        enabled: true,
+      };
+      config.instrumentationOptions.console = {
+        enabled: true,
+      };
       // A second enabled BunyanInstrumentation appends another OpenTelemetry
-      // stream to every logger, which duplicates every log record.
-      const instrumentations = createInstrumentations(config);
-      const bunyanInstrumentations = instrumentations.filter(
-        (instrumentation) =>
-          instrumentation.instrumentationName === "@opentelemetry/instrumentation-bunyan",
+      // stream to every logger, which duplicates every log record. Every
+      // instrumentation must therefore be created exactly once.
+      const names = createInstrumentations(config).map(
+        (instrumentation) => instrumentation.instrumentationName,
       );
-      assert.strictEqual(bunyanInstrumentations.length, 1);
-      assert.isUndefined((new LogHandler(config, metricHandler) as any).getInstrumentations);
+      assert.deepStrictEqual(
+        names.filter((name, index) => names.indexOf(name) !== index),
+        [],
+        "createInstrumentations returned duplicate instrumentations",
+      );
+
+      // The handler must not hold instrumentations of its own, under any
+      // property name — anything it constructs is enabled but never registered.
+      const logHandler = new LogHandler(config, metricHandler);
+      const held = Object.values(logHandler as unknown as Record<string, unknown>)
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter(
+          (value) => typeof value === "object" && value !== null && "instrumentationName" in value,
+        );
+      assert.deepStrictEqual(held, [], "LogHandler must not create instrumentations");
     });
 
     it("should add winston instrumentation", () => {
