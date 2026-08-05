@@ -5,7 +5,7 @@ import { TraceHandler } from "../../../../src/azureMonitor/traces/index.js";
 import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
 import { InternalConfig } from "../../../../src/shared/index.js";
 import { ApplicationInsightsSampler } from "../../../../src/azureMonitor/traces/sampler.js";
-import { createSampler } from "../../../../src/distro/instrumentations.js";
+import { createSampler, createInstrumentations } from "../../../../src/distro/instrumentations.js";
 import {
   HttpInstrumentation,
   type HttpInstrumentationConfig,
@@ -171,10 +171,12 @@ describe("Library/TraceHandler", () => {
     _config.instrumentationOptions.http = httpConfig;
     metricHandler = new MetricHandler(_config);
     handler = new TraceHandler(_config, metricHandler);
-    handler.getInstrumentations().forEach((instrumentation) => {
-      instrumentation.enable();
-      activeInstrumentations.push(instrumentation);
-    });
+    createInstrumentations(_config, { filterAzureMonitorRequests: true }).forEach(
+      (instrumentation) => {
+        instrumentation.enable();
+        activeInstrumentations.push(instrumentation);
+      },
+    );
 
     // Because the instrumentation is registered globally, its config is not updated
     // when the handler is created. We need to mock the getConfig method to return
@@ -354,9 +356,71 @@ describe("Library/TraceHandler", () => {
       };
       metricHandler = new MetricHandler(_config);
       handler = new TraceHandler(_config, metricHandler);
-      const instrumentations = handler.getInstrumentations();
+      const instrumentations = createInstrumentations(_config);
       expect(instrumentations).toHaveLength(0);
       expect(instrumentations[0]).not.toBeInstanceOf(HttpInstrumentation);
+    });
+
+    it("the trace handler does not create instrumentations", () => {
+      metricHandler = new MetricHandler(_config);
+      handler = new TraceHandler(_config, metricHandler);
+      const held = Object.values(handler as unknown as Record<string, unknown>)
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter(
+          (value) => typeof value === "object" && value !== null && "instrumentationName" in value,
+        );
+      expect(held).toEqual([]);
+    });
+
+    it("applies the Azure Monitor outgoing request filter exactly once", () => {
+      const countingRequest = () => {
+        let reads = 0;
+        const request = {} as Http.RequestOptions;
+        Object.defineProperty(request, "headers", {
+          get() {
+            reads++;
+            return { "user-agent": "curl/8.0" };
+          },
+        });
+        return { request, reads: () => reads };
+      };
+
+      const buildHook = (
+        withHandler: boolean,
+        userHook: HttpInstrumentationConfig["ignoreOutgoingRequestHook"],
+      ) => {
+        const config = new InternalConfig();
+        config.azureMonitorExporterOptions.connectionString =
+          "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
+        config.instrumentationOptions.http = {
+          enabled: true,
+          ignoreOutgoingRequestHook: userHook,
+        } as HttpInstrumentationConfig;
+        createInstrumentations(config, { filterAzureMonitorRequests: true });
+        if (withHandler) {
+          metricHandler = new MetricHandler(config);
+          handler = new TraceHandler(config, metricHandler);
+        }
+        return (config.instrumentationOptions.http as HttpInstrumentationConfig)
+          .ignoreOutgoingRequestHook!;
+      };
+
+      const baselineHook = buildHook(false, () => false);
+      const baseline = countingRequest();
+      baselineHook(baseline.request);
+
+      const userHook = vi.fn().mockReturnValue(false);
+      const hook = buildHook(true, userHook);
+
+      expect(
+        hook({ headers: { "user-agent": "azsdk-js-monitor-opentelemetry-exporter/1.0" } }),
+      ).toBe(true);
+      expect(userHook).not.toHaveBeenCalled();
+
+      const actual = countingRequest();
+      expect(hook(actual.request)).toBe(false);
+      expect(userHook).toHaveBeenCalledTimes(1);
+      expect(actual.reads()).toBe(baseline.reads());
     });
   });
 });

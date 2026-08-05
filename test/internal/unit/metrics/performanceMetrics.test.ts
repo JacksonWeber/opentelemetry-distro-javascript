@@ -3,6 +3,7 @@
 import type { MockInstance } from "vitest";
 import { afterEach, assert, beforeAll, afterAll, describe, it, vi } from "vitest";
 import { SpanKind } from "@opentelemetry/api";
+import os from "node:os";
 import { ExportResultCode } from "@opentelemetry/core";
 import { PerformanceCounterMetrics } from "../../../../src/azureMonitor/metrics/performanceCounters.js";
 import {
@@ -50,6 +51,7 @@ describe("PerformanceCounterMetricsHandler", () => {
   const serverSpan: any = {
     kind: SpanKind.SERVER,
     duration: [654, 321000000],
+    events: [{ name: "exception" }],
     attributes: {
       "http.status_code": 200,
     },
@@ -58,6 +60,9 @@ describe("PerformanceCounterMetricsHandler", () => {
 
   describe("#Metrics", () => {
     it("should observe instruments during collection", async () => {
+      assert.closeTo(autoCollect["lastRequestRate"].time, Date.now(), 5000);
+      assert.closeTo(autoCollect["lastExceptionRate"].time, Date.now(), 5000);
+
       for (let i = 0; i < 10; i++) {
         autoCollect.recordSpan(serverSpan);
       }
@@ -94,7 +99,7 @@ describe("PerformanceCounterMetricsHandler", () => {
       );
 
       assert.deepStrictEqual(metrics[1].descriptor.name, "Request_Rate");
-      assert.isTrue((metrics[1].dataPoints[0].value as number) > 0, "Wrong request rate value");
+      assert.isTrue((metrics[1].dataPoints[0].value as number) > 1, "Wrong request rate value");
       assert.deepStrictEqual(metrics[2].descriptor.name, "Private_Bytes");
       assert.isTrue((metrics[2].dataPoints[0].value as number) > 0, "Wrong private bytes value");
       assert.deepStrictEqual(metrics[3].descriptor.name, "Available_Bytes");
@@ -119,6 +124,31 @@ describe("PerformanceCounterMetricsHandler", () => {
       );
       assert.isFalse(Number.isNaN(metrics[6].dataPoints[0].value), "Value should not be NaN");
       assert.deepStrictEqual(metrics[7].descriptor.name, "Exception_Rate");
+      assert.isTrue((metrics[7].dataPoints[0].value as number) > 1, "Wrong exception rate value");
+    });
+
+    it("uses independent state for standard and normalized process CPU", () => {
+      const cpus = os.cpus();
+      autoCollect["lastCpusProcess"] = cpus;
+      autoCollect["lastCpusProcessNormalized"] = cpus;
+      autoCollect["lastAppCpuUsage"] = { user: 0, system: 0 };
+      autoCollect["lastAppCpuUsageNormalized"] = { user: 0, system: 0 };
+      autoCollect["lastHrtime"] = [0, 0];
+      autoCollect["lastHrtimeNormalized"] = [0, 0];
+
+      vi.spyOn(process, "cpuUsage").mockReturnValue({ user: 120000, system: 0 });
+      vi.spyOn(process, "hrtime").mockReturnValue([1, 0]);
+
+      const standard: number[] = [];
+      const normalized: number[] = [];
+      autoCollect["getProcessTime"]({ observe: (value: number) => standard.push(value) });
+      autoCollect["getNormalizedProcessTime"]({
+        observe: (value: number) => normalized.push(value),
+      });
+
+      assert.strictEqual(standard.length, 1);
+      assert.strictEqual(normalized.length, 1);
+      assert.closeTo(normalized[0], standard[0] / cpus.length, 0.0001);
     });
   });
 });

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- Fix duplicate Bunyan logs, missing HTTP duration metrics, duplicate request filtering, and incorrect performance-counter values. [#212](https://github.com/microsoft/opentelemetry-distro-javascript/pull/212)
+
 ## [1.3.0] - 2026-08-03
 
 ### Features Added
