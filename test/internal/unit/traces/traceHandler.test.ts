@@ -171,7 +171,6 @@ describe("Library/TraceHandler", () => {
     _config.instrumentationOptions.http = httpConfig;
     metricHandler = new MetricHandler(_config);
     handler = new TraceHandler(_config, metricHandler);
-    // Instrumentations are owned by createInstrumentations, not the handler.
     createInstrumentations(_config, { filterAzureMonitorRequests: true }).forEach(
       (instrumentation) => {
         instrumentation.enable();
@@ -363,8 +362,6 @@ describe("Library/TraceHandler", () => {
     });
 
     it("the trace handler does not create instrumentations", () => {
-      // An enabled instrumentation the SDK never registers keeps a no-op meter
-      // and suppresses the HTTP duration metrics.
       metricHandler = new MetricHandler(_config);
       handler = new TraceHandler(_config, metricHandler);
       const held = Object.values(handler as unknown as Record<string, unknown>)
@@ -376,8 +373,6 @@ describe("Library/TraceHandler", () => {
     });
 
     it("applies the Azure Monitor outgoing request filter exactly once", () => {
-      // Counts how many times the filter inspected the request, so a second
-      // wrapping layer is detectable rather than silently equivalent.
       const countingRequest = () => {
         let reads = 0;
         const request = {} as Http.RequestOptions;
@@ -403,7 +398,8 @@ describe("Library/TraceHandler", () => {
         } as HttpInstrumentationConfig;
         createInstrumentations(config, { filterAzureMonitorRequests: true });
         if (withHandler) {
-          new TraceHandler(config, new MetricHandler(config));
+          metricHandler = new MetricHandler(config);
+          handler = new TraceHandler(config, metricHandler);
         }
         return (config.instrumentationOptions.http as HttpInstrumentationConfig)
           .ignoreOutgoingRequestHook!;
@@ -416,14 +412,11 @@ describe("Library/TraceHandler", () => {
       const userHook = vi.fn().mockReturnValue(false);
       const hook = buildHook(true, userHook);
 
-      // Exporter traffic is dropped without consulting the caller's hook.
       expect(
         hook({ headers: { "user-agent": "azsdk-js-monitor-opentelemetry-exporter/1.0" } }),
       ).toBe(true);
       expect(userHook).not.toHaveBeenCalled();
 
-      // Everything else defers to the caller's hook, and the Azure Monitor
-      // check runs the same number of times as with no handler at all.
       const actual = countingRequest();
       expect(hook(actual.request)).toBe(false);
       expect(userHook).toHaveBeenCalledTimes(1);

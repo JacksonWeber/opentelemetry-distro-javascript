@@ -50,7 +50,7 @@ export class PerformanceCounterMetrics {
   private processTimeGaugeCallback: ObservableCallback;
   private exceptionCountGauge: ObservableGauge;
   private exceptionCountGaugeCallback: ObservableCallback;
-  private lastExceptionRate: { count: number; time: number } = { count: 0, time: 0 };
+  private lastExceptionRate: { count: number; time: number };
   private totalCount: number = 0;
   private intervalExecutionTime = 0;
   private lastRequestRate: { count: number; time: number; executionInterval: number };
@@ -66,9 +66,7 @@ export class PerformanceCounterMetrics {
     speed: number;
     times: { user: number; nice: number; sys: number; idle: number; irq: number };
   }[];
-  // Must not share state with the standard process time gauge: both callbacks
-  // run in the same collection cycle, so the second one would measure a
-  // ~zero-length window.
+  // Both process CPU callbacks need independent sampling state.
   private lastAppCpuUsageNormalized: { user: number; system: number };
   private lastHrtimeNormalized: number[];
   private lastCpusProcessNormalized: {
