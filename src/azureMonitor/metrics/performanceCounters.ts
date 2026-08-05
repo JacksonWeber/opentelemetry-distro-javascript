@@ -66,9 +66,9 @@ export class PerformanceCounterMetrics {
     speed: number;
     times: { user: number; nice: number; sys: number; idle: number; irq: number };
   }[];
-  // Kept separate from the standard process time gauge: sharing this state
-  // makes whichever callback runs second measure a ~zero-length window, and the
-  // resulting quotient is garbage (observed 28.26% against a true 0.29%).
+  // Must not share state with the standard process time gauge: both callbacks
+  // run in the same collection cycle, so the second one would measure a
+  // ~zero-length window.
   private lastAppCpuUsageNormalized: { user: number; system: number };
   private lastHrtimeNormalized: number[];
   private lastCpusProcessNormalized: {

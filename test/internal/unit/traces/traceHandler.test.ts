@@ -363,8 +363,8 @@ describe("Library/TraceHandler", () => {
     });
 
     it("the trace handler does not create instrumentations", () => {
-      // An enabled copy the SDK never registers keeps a no-op meter and
-      // suppresses the HTTP duration metrics.
+      // An enabled instrumentation the SDK never registers keeps a no-op meter
+      // and suppresses the HTTP duration metrics.
       metricHandler = new MetricHandler(_config);
       handler = new TraceHandler(_config, metricHandler);
       const held = Object.values(handler as unknown as Record<string, unknown>)
@@ -403,7 +403,6 @@ describe("Library/TraceHandler", () => {
         } as HttpInstrumentationConfig;
         createInstrumentations(config, { filterAzureMonitorRequests: true });
         if (withHandler) {
-          // The handler used to wrap the hook a second time on this same object.
           new TraceHandler(config, new MetricHandler(config));
         }
         return (config.instrumentationOptions.http as HttpInstrumentationConfig)

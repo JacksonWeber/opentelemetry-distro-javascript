@@ -20,12 +20,6 @@ export class LogHandler {
 
   /**
    * Initializes a new instance of the LogHandler class.
-   *
-   * Instrumentations are owned by `createInstrumentations`. Creating them here
-   * too left an enabled copy the SDK never registered, and bunyan's
-   * instrumentation appends a stream per enable without unwrapping — so every
-   * record was emitted twice.
-   *
    * @param config - Microsoft OpenTelemetry configuration.
    * @param metricHandler - MetricHandler.
    */

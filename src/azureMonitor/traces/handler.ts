@@ -21,11 +21,6 @@ export class TraceHandler {
 
   /**
    * Initializes a new instance of the TraceHandler class.
-   *
-   * Instrumentations are owned by `createInstrumentations`. Creating them here
-   * too left an enabled copy the SDK never registered, which kept a no-op meter
-   * and suppressed the HTTP duration metrics.
-   *
    * @param config - Configuration.
    * @param metricHandler - MetricHandler.
    */
