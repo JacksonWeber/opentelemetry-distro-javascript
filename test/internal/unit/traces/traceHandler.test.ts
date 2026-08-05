@@ -363,8 +363,8 @@ describe("Library/TraceHandler", () => {
     });
 
     it("the trace handler does not create instrumentations", () => {
-      // A second, enabled copy of an instrumentation that the SDK never wires
-      // up keeps a no-op meter and suppresses the HTTP duration metrics.
+      // An enabled copy the SDK never registers keeps a no-op meter and
+      // suppresses the HTTP duration metrics.
       metricHandler = new MetricHandler(_config);
       handler = new TraceHandler(_config, metricHandler);
       const held = Object.values(handler as unknown as Record<string, unknown>)
@@ -373,6 +373,62 @@ describe("Library/TraceHandler", () => {
           (value) => typeof value === "object" && value !== null && "instrumentationName" in value,
         );
       expect(held).toEqual([]);
+    });
+
+    it("applies the Azure Monitor outgoing request filter exactly once", () => {
+      // Counts how many times the filter inspected the request, so a second
+      // wrapping layer is detectable rather than silently equivalent.
+      const countingRequest = () => {
+        let reads = 0;
+        const request = {} as Http.RequestOptions;
+        Object.defineProperty(request, "headers", {
+          get() {
+            reads++;
+            return { "user-agent": "curl/8.0" };
+          },
+        });
+        return { request, reads: () => reads };
+      };
+
+      const buildHook = (
+        withHandler: boolean,
+        userHook: HttpInstrumentationConfig["ignoreOutgoingRequestHook"],
+      ) => {
+        const config = new InternalConfig();
+        config.azureMonitorExporterOptions.connectionString =
+          "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
+        config.instrumentationOptions.http = {
+          enabled: true,
+          ignoreOutgoingRequestHook: userHook,
+        } as HttpInstrumentationConfig;
+        createInstrumentations(config, { filterAzureMonitorRequests: true });
+        if (withHandler) {
+          // The handler used to wrap the hook a second time on this same object.
+          new TraceHandler(config, new MetricHandler(config));
+        }
+        return (config.instrumentationOptions.http as HttpInstrumentationConfig)
+          .ignoreOutgoingRequestHook!;
+      };
+
+      const baselineHook = buildHook(false, () => false);
+      const baseline = countingRequest();
+      baselineHook(baseline.request);
+
+      const userHook = vi.fn().mockReturnValue(false);
+      const hook = buildHook(true, userHook);
+
+      // Exporter traffic is dropped without consulting the caller's hook.
+      expect(
+        hook({ headers: { "user-agent": "azsdk-js-monitor-opentelemetry-exporter/1.0" } }),
+      ).toBe(true);
+      expect(userHook).not.toHaveBeenCalled();
+
+      // Everything else defers to the caller's hook, and the Azure Monitor
+      // check runs the same number of times as with no handler at all.
+      const actual = countingRequest();
+      expect(hook(actual.request)).toBe(false);
+      expect(userHook).toHaveBeenCalledTimes(1);
+      expect(actual.reads()).toBe(baseline.reads());
     });
   });
 });

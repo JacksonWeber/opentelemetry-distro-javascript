@@ -190,8 +190,7 @@ describe("LogHandler", () => {
         enabled: true,
       };
       // A second enabled BunyanInstrumentation appends another OpenTelemetry
-      // stream to every logger, which duplicates every log record. Every
-      // instrumentation must therefore be created exactly once.
+      // stream to every logger, duplicating every record.
       const names = createInstrumentations(config).map(
         (instrumentation) => instrumentation.instrumentationName,
       );
@@ -201,8 +200,7 @@ describe("LogHandler", () => {
         "createInstrumentations returned duplicate instrumentations",
       );
 
-      // The handler must not hold instrumentations of its own, under any
-      // property name — anything it constructs is enabled but never registered.
+      // The handler must not hold instrumentations under any property name.
       const logHandler = new LogHandler(config, metricHandler);
       const held = Object.values(logHandler as unknown as Record<string, unknown>)
         .flatMap((value) => (Array.isArray(value) ? value : [value]))

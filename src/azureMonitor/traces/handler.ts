@@ -22,11 +22,9 @@ export class TraceHandler {
   /**
    * Initializes a new instance of the TraceHandler class.
    *
-   * Trace instrumentations are not created here — they are created once by
-   * `createInstrumentations` and registered with the NodeSDK. Creating them
-   * here as well left a second, enabled copy of each instrumentation that the
-   * SDK never wired up, so it kept a no-op meter and silently suppressed the
-   * HTTP instrumentation's duration metrics.
+   * Instrumentations are owned by `createInstrumentations`. Creating them here
+   * too left an enabled copy the SDK never registered, which kept a no-op meter
+   * and suppressed the HTTP duration metrics.
    *
    * @param config - Configuration.
    * @param metricHandler - MetricHandler.
