@@ -859,7 +859,7 @@ describe("setRequestAttributes", () => {
           topP: "0.9",
           topK: 10,
           stopSequences: "END",
-          streaming: false,
+          streaming: " FALSE ",
           responseFormat: "text",
         },
       },
@@ -875,6 +875,28 @@ describe("setRequestAttributes", () => {
     assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_TOP_K], 10);
     assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES], ["END"]);
     assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_STREAM], false);
+  });
+
+  it("rejects whitespace-only stop sequences", () => {
+    for (const stop of ["   ", ["DONE", "\t"]]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params: { stop } } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(span.attrs, {});
+    }
+  });
+
+  it("ignores invocation params that are not objects", () => {
+    for (const invocation_params of [null, "invalid", 1, true, []]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(span.attrs, {});
+    }
   });
 
   it("reads Responses API output type from text.format", () => {

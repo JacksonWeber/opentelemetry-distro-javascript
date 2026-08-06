@@ -603,33 +603,40 @@ function integer(value: unknown): number | undefined {
 
 function parseBoolean(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
-  if (value === "true") return true;
-  if (value === "false") return false;
+  if (!isString(value)) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
   return undefined;
 }
 
 function stringArray(value: unknown): string[] | undefined {
-  if (isString(value) && value.length > 0) return [value];
+  if (isString(value) && value.trim().length > 0) return [value];
   if (!Array.isArray(value)) return undefined;
-  const strings = value.filter((item): item is string => isString(item) && item.length > 0);
+  const strings = value.filter((item): item is string => isString(item) && item.trim().length > 0);
   return strings.length === value.length && strings.length > 0 ? strings : undefined;
 }
+
+const OUTPUT_TYPES: Readonly<Record<string, string>> = {
+  text: "text",
+  json: "json",
+  json_object: "json",
+  json_schema: "json",
+  image: "image",
+  b64_json: "image",
+  url: "image",
+  audio: "speech",
+  speech: "speech",
+};
 
 function normalizeOutputType(value: unknown): string | undefined {
   if (!isString(value)) return undefined;
   const normalized = value.trim().toLowerCase();
-  const outputTypes: Record<string, string> = {
-    text: "text",
-    json: "json",
-    json_object: "json",
-    json_schema: "json",
-    image: "image",
-    b64_json: "image",
-    url: "image",
-    audio: "speech",
-    speech: "speech",
-  };
-  return outputTypes[normalized];
+  return OUTPUT_TYPES[normalized];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function getOutputType(params: Record<string, unknown>): string | undefined {
@@ -638,18 +645,18 @@ function getOutputType(params: Record<string, unknown>): string | undefined {
   if (explicitType) return explicitType;
 
   const responseFormat = firstDefined(params, ["response_format", "responseFormat"]);
-  if (responseFormat && typeof responseFormat === "object" && !Array.isArray(responseFormat)) {
-    const formatType = normalizeOutputType((responseFormat as Record<string, unknown>).type);
+  if (isRecord(responseFormat)) {
+    const formatType = normalizeOutputType(responseFormat.type);
     if (formatType) return formatType;
   }
   const responseFormatType = normalizeOutputType(responseFormat);
   if (responseFormatType) return responseFormatType;
 
   const text = params.text;
-  if (text && typeof text === "object" && !Array.isArray(text)) {
-    const format = (text as Record<string, unknown>).format;
-    if (format && typeof format === "object" && !Array.isArray(format)) {
-      return normalizeOutputType((format as Record<string, unknown>).type);
+  if (isRecord(text)) {
+    const format = text.format;
+    if (isRecord(format)) {
+      return normalizeOutputType(format.type);
     }
   }
   return undefined;
@@ -659,8 +666,8 @@ function getOutputType(params: Record<string, unknown>): string | undefined {
 // Both OpenAI-style snake_case and LangChain/provider camelCase aliases are
 // accepted because callback payloads vary by model integration and API path.
 export function setRequestAttributes(run: Run, span: Span): void {
-  const params = run.extra?.invocation_params as Record<string, unknown> | undefined;
-  if (!params) return;
+  const params = run.extra?.invocation_params;
+  if (!isRecord(params)) return;
 
   const outputType = getOutputType(params);
   if (outputType) span.setAttribute(ATTR_GEN_AI_OUTPUT_TYPE, outputType);
