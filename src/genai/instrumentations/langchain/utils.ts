@@ -9,10 +9,20 @@ import {
   ATTR_GEN_AI_CONVERSATION_ID,
   ATTR_GEN_AI_INPUT_MESSAGES,
   ATTR_GEN_AI_OPERATION_NAME,
+  ATTR_GEN_AI_OUTPUT_TYPE,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
+  ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY,
+  ATTR_GEN_AI_REQUEST_MAX_TOKENS,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY,
+  ATTR_GEN_AI_REQUEST_SEED,
+  ATTR_GEN_AI_REQUEST_STOP_SEQUENCES,
+  ATTR_GEN_AI_REQUEST_STREAM,
+  ATTR_GEN_AI_REQUEST_TEMPERATURE,
+  ATTR_GEN_AI_REQUEST_TOP_K,
+  ATTR_GEN_AI_REQUEST_TOP_P,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -564,6 +574,135 @@ export function setChoiceCountAttribute(run: Run, span: Span) {
   if (n !== undefined && n !== 1) {
     span.setAttribute(ATTR_GEN_AI_REQUEST_CHOICE_COUNT, n);
   }
+}
+
+function firstDefined(params: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (params[key] !== undefined && params[key] !== null) {
+      return params[key];
+    }
+  }
+  return undefined;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function integer(value: unknown): number | undefined {
+  const parsed = finiteNumber(value);
+  return parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (isString(value) && value.length > 0) return [value];
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => isString(item) && item.length > 0);
+  return strings.length === value.length && strings.length > 0 ? strings : undefined;
+}
+
+function normalizeOutputType(value: unknown): string | undefined {
+  if (!isString(value)) return undefined;
+  const normalized = value.trim().toLowerCase();
+  const outputTypes: Record<string, string> = {
+    text: "text",
+    json: "json",
+    json_object: "json",
+    json_schema: "json",
+    image: "image",
+    b64_json: "image",
+    url: "image",
+    audio: "speech",
+    speech: "speech",
+  };
+  return outputTypes[normalized];
+}
+
+function getOutputType(params: Record<string, unknown>): string | undefined {
+  const explicit = firstDefined(params, ["output_type", "outputType"]);
+  const explicitType = normalizeOutputType(explicit);
+  if (explicitType) return explicitType;
+
+  const responseFormat = firstDefined(params, ["response_format", "responseFormat"]);
+  if (responseFormat && typeof responseFormat === "object" && !Array.isArray(responseFormat)) {
+    const formatType = normalizeOutputType((responseFormat as Record<string, unknown>).type);
+    if (formatType) return formatType;
+  }
+  const responseFormatType = normalizeOutputType(responseFormat);
+  if (responseFormatType) return responseFormatType;
+
+  const text = params.text;
+  if (text && typeof text === "object" && !Array.isArray(text)) {
+    const format = (text as Record<string, unknown>).format;
+    if (format && typeof format === "object" && !Array.isArray(format)) {
+      return normalizeOutputType((format as Record<string, unknown>).type);
+    }
+  }
+  return undefined;
+}
+
+// Request attributes surfaced by LangChain under extra.invocation_params.
+// Both OpenAI-style snake_case and LangChain/provider camelCase aliases are
+// accepted because callback payloads vary by model integration and API path.
+export function setRequestAttributes(run: Run, span: Span): void {
+  const params = run.extra?.invocation_params as Record<string, unknown> | undefined;
+  if (!params) return;
+
+  const outputType = getOutputType(params);
+  if (outputType) span.setAttribute(ATTR_GEN_AI_OUTPUT_TYPE, outputType);
+
+  const numberAttributes: Array<[string, string[]]> = [
+    [ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY, ["frequency_penalty", "frequencyPenalty"]],
+    [ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY, ["presence_penalty", "presencePenalty"]],
+    [ATTR_GEN_AI_REQUEST_TEMPERATURE, ["temperature"]],
+    [ATTR_GEN_AI_REQUEST_TOP_P, ["top_p", "topP"]],
+  ];
+  for (const [attribute, keys] of numberAttributes) {
+    const value = finiteNumber(firstDefined(params, keys));
+    if (value !== undefined) span.setAttribute(attribute, value);
+  }
+
+  const maxTokens = integer(
+    firstDefined(params, [
+      "max_tokens",
+      "maxTokens",
+      "max_completion_tokens",
+      "maxCompletionTokens",
+      "max_output_tokens",
+      "maxOutputTokens",
+    ]),
+  );
+  if (maxTokens !== undefined) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MAX_TOKENS, maxTokens);
+  }
+
+  const seed = integer(firstDefined(params, ["seed"]));
+  if (seed !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_SEED, seed);
+
+  const topK = integer(firstDefined(params, ["top_k", "topK"]));
+  if (topK !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_TOP_K, topK);
+
+  const stopSequences = stringArray(
+    firstDefined(params, ["stop", "stop_sequences", "stopSequences"]),
+  );
+  if (stopSequences) span.setAttribute(ATTR_GEN_AI_REQUEST_STOP_SEQUENCES, stopSequences);
+
+  const stream = parseBoolean(firstDefined(params, ["stream", "streaming"]));
+  if (stream !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_STREAM, stream);
 }
 
 // Response identifier - Helper to extract the unique response id returned by
