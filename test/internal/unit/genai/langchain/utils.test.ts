@@ -877,8 +877,22 @@ describe("setRequestAttributes", () => {
     assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_STREAM], false);
   });
 
-  it("rejects whitespace-only stop sequences", () => {
-    for (const stop of ["   ", ["DONE", "\t"]]) {
+  it("preserves whitespace stop sequences", () => {
+    for (const stop of ["\n", ["STOP", "\n\n"]]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params: { stop } } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(
+        span.attrs[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES],
+        Array.isArray(stop) ? stop : [stop],
+      );
+    }
+  });
+
+  it("rejects empty stop sequences", () => {
+    for (const stop of ["", ["DONE", ""]]) {
       const span = makeSpan();
       const run = makeRun({ extra: { invocation_params: { stop } } });
 
@@ -912,6 +926,31 @@ describe("setRequestAttributes", () => {
     setRequestAttributes(run, span);
 
     assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], "json");
+  });
+
+  it("normalizes canonical and provider-specific output types", () => {
+    const outputTypes = [
+      ["text", "text"],
+      ["json", "json"],
+      ["image", "image"],
+      ["speech", "speech"],
+      ["json_object", "json"],
+      ["json_schema", "json"],
+      ["b64_json", "image"],
+      ["url", "image"],
+      ["audio", "speech"],
+    ];
+
+    for (const [outputType, expected] of outputTypes) {
+      const span = makeSpan();
+      const run = makeRun({
+        extra: { invocation_params: { output_type: outputType } },
+      });
+
+      setRequestAttributes(run, span);
+
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], expected);
+    }
   });
 
   it("ignores absent or invalid request parameters", () => {

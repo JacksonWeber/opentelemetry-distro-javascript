@@ -576,6 +576,8 @@ export function setChoiceCountAttribute(run: Run, span: Span) {
   }
 }
 
+// LangChain exposes provider-specific invocation params as unknown values. OpenTelemetry only
+// validates already-normalized attribute values, so aliases and coercion are handled at this boundary.
 function firstDefined(params: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null) {
@@ -611,28 +613,26 @@ function parseBoolean(value: unknown): boolean | undefined {
 }
 
 function stringArray(value: unknown): string[] | undefined {
-  if (isString(value) && value.trim().length > 0) return [value];
+  if (isString(value) && value.length > 0) return [value];
   if (!Array.isArray(value)) return undefined;
-  const strings = value.filter((item): item is string => isString(item) && item.trim().length > 0);
+  const strings = value.filter((item): item is string => isString(item) && item.length > 0);
   return strings.length === value.length && strings.length > 0 ? strings : undefined;
 }
 
-const OUTPUT_TYPES: Readonly<Record<string, string>> = {
-  text: "text",
-  json: "json",
+const OUTPUT_TYPES: readonly string[] = ["text", "json", "image", "speech"];
+
+const OUTPUT_TYPE_ALIASES: Readonly<Record<string, string>> = {
   json_object: "json",
   json_schema: "json",
-  image: "image",
   b64_json: "image",
   url: "image",
   audio: "speech",
-  speech: "speech",
 };
 
 function normalizeOutputType(value: unknown): string | undefined {
   if (!isString(value)) return undefined;
   const normalized = value.trim().toLowerCase();
-  return OUTPUT_TYPES[normalized];
+  return OUTPUT_TYPES.includes(normalized) ? normalized : OUTPUT_TYPE_ALIASES[normalized];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
