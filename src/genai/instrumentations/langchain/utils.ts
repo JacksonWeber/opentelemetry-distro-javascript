@@ -576,8 +576,8 @@ export function setChoiceCountAttribute(run: Run, span: Span) {
   }
 }
 
-// LangChain exposes provider-specific invocation params as unknown values. OpenTelemetry only
-// validates already-normalized attribute values, so aliases and coercion are handled at this boundary.
+// LangChain exposes provider-specific invocation params as unknown values. Match the upstream
+// OpenTelemetry GenAI instrumentations by accepting typed SDK values without coercing strings.
 function firstDefined(params: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null) {
@@ -587,29 +587,10 @@ function firstDefined(params: Record<string, unknown>, keys: string[]): unknown 
   return undefined;
 }
 
-function finiteNumber(value: unknown): number | undefined {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 function integer(value: unknown): number | undefined {
-  const parsed = finiteNumber(value);
-  return parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
-}
-
-function parseBoolean(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") return value;
-  if (!isString(value)) return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "true") return true;
-  if (normalized === "false") return false;
-  return undefined;
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value)
+    ? value
+    : undefined;
 }
 
 function stringArray(value: unknown): string[] | undefined {
@@ -679,8 +660,10 @@ export function setRequestAttributes(run: Run, span: Span): void {
     [ATTR_GEN_AI_REQUEST_TOP_P, ["top_p", "topP"]],
   ];
   for (const [attribute, keys] of numberAttributes) {
-    const value = finiteNumber(firstDefined(params, keys));
-    if (value !== undefined) span.setAttribute(attribute, value);
+    const value = firstDefined(params, keys);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      span.setAttribute(attribute, value);
+    }
   }
 
   const maxTokens = integer(
@@ -708,8 +691,8 @@ export function setRequestAttributes(run: Run, span: Span): void {
   );
   if (stopSequences) span.setAttribute(ATTR_GEN_AI_REQUEST_STOP_SEQUENCES, stopSequences);
 
-  const stream = parseBoolean(firstDefined(params, ["stream", "streaming"]));
-  if (stream !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_STREAM, stream);
+  const stream = firstDefined(params, ["stream", "streaming"]);
+  if (typeof stream === "boolean") span.setAttribute(ATTR_GEN_AI_REQUEST_STREAM, stream);
 }
 
 // Response identifier - Helper to extract the unique response id returned by

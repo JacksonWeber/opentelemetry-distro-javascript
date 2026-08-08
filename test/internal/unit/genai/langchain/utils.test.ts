@@ -848,18 +848,18 @@ describe("setRequestAttributes", () => {
     });
   });
 
-  it("supports camelCase aliases and normalizes a single stop sequence", () => {
+  it("supports typed camelCase provider aliases and normalizes a single stop sequence", () => {
     const span = makeSpan();
     const run = makeRun({
       extra: {
         invocation_params: {
-          maxOutputTokens: "256",
-          frequencyPenalty: "0.25",
+          maxOutputTokens: 256,
+          frequencyPenalty: 0.25,
           presencePenalty: 0,
-          topP: "0.9",
+          topP: 0.9,
           topK: 10,
           stopSequences: "END",
-          streaming: " FALSE ",
+          streaming: false,
           responseFormat: "text",
         },
       },
@@ -962,9 +962,11 @@ describe("setRequestAttributes", () => {
           top_p: "not-a-number",
           top_k: 1.5,
           max_tokens: 1.5,
+          maxOutputTokens: "256",
+          frequencyPenalty: "0.25",
           seed: {},
           stop: ["valid", 1],
-          stream: "yes",
+          stream: "false",
           response_format: { type: "unsupported" },
         },
       },
