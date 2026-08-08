@@ -12,13 +12,6 @@ import type { SdkStatsFeatures } from "../types.js";
 import { BrowserSdkLoader } from "./browserSdkLoader/browserSdkLoader.js";
 import { setSdkPrefix } from "./metrics/quickpulse/utils.js";
 import { Logger } from "../shared/logging/index.js";
-import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-conventions";
-
-/**
- * Semantic attribute for cloud resource ID, defined by \@opentelemetry/resource-detector-azure
- * @internal
- */
-const CLOUD_RESOURCE_ID_ATTRIBUTE = "cloud.resource_id";
 
 /**
  * Check whether Azure Monitor has a usable connection string available
@@ -59,15 +52,14 @@ export function validateAzureMonitorConfig(config: InternalConfig): boolean {
  * @internal
  */
 export function getAzureMonitorSdkStatsFeatures(config: InternalConfig): SdkStatsFeatures {
-  const resourceAttributes = config.resource.attributes;
-  const aksResourceDetected =
-    SEMRESATTRS_K8S_CLUSTER_NAME in resourceAttributes ||
-    CLOUD_RESOURCE_ID_ATTRIBUTE in resourceAttributes;
   return {
     browserSdkLoader: config.browserSdkLoaderOptions.enabled,
     aadHandling: !!config.azureMonitorExporterOptions?.credential,
     diskRetry: !config.azureMonitorExporterOptions?.disableOfflineStorage,
-    aksResourceDetectorPopulation: aksResourceDetected,
+    // Only report this when the AKS resource detector itself populated the AKS cluster
+    // attributes, which requires the customer to have configured access to the
+    // aks-cluster-metadata ConfigMap (RBAC + env var or mounted ConfigMap).
+    aksResourceDetectorPopulation: config.aksResourceDetectorPopulated,
   };
 }
 
