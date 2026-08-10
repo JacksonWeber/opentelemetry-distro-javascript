@@ -600,14 +600,13 @@ function stringArray(value: unknown): string[] | undefined {
   return strings.length === value.length && strings.length > 0 ? strings : undefined;
 }
 
-const OUTPUT_TYPES: readonly string[] = ["text", "json", "image", "speech"];
+const OUTPUT_TYPES: readonly string[] = ["text", "json", "image"];
 
 const OUTPUT_TYPE_ALIASES: Readonly<Record<string, string>> = {
   json_object: "json",
   json_schema: "json",
   b64_json: "image",
   url: "image",
-  audio: "speech",
 };
 
 function normalizeOutputType(value: unknown): string | undefined {

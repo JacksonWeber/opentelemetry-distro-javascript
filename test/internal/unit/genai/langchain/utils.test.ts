@@ -933,12 +933,10 @@ describe("setRequestAttributes", () => {
       ["text", "text"],
       ["json", "json"],
       ["image", "image"],
-      ["speech", "speech"],
       ["json_object", "json"],
       ["json_schema", "json"],
       ["b64_json", "image"],
       ["url", "image"],
-      ["audio", "speech"],
     ];
 
     for (const [outputType, expected] of outputTypes) {
@@ -950,6 +948,19 @@ describe("setRequestAttributes", () => {
       setRequestAttributes(run, span);
 
       assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], expected);
+    }
+  });
+
+  it("ignores output types not documented by the semantic conventions", () => {
+    for (const outputType of ["speech", "audio"]) {
+      const span = makeSpan();
+      const run = makeRun({
+        extra: { invocation_params: { output_type: outputType } },
+      });
+
+      setRequestAttributes(run, span);
+
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], undefined);
     }
   });
 
