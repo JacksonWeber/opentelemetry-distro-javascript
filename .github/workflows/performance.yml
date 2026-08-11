@@ -1,0 +1,92 @@
+name: Performance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Benchmark distro overhead
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PERF_REGRESSION_THRESHOLD: "15"
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          path: pr
+          fetch-depth: 0
+
+      - name: Check out base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          path: base
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: pr/package-lock.json
+
+      - name: Install and build candidate
+        working-directory: pr
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install and build baseline
+        working-directory: base
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run baseline benchmarks
+        working-directory: pr
+        run: |
+          node --expose-gc perf/benchmark.mjs \
+            --package-root "$GITHUB_WORKSPACE/base" \
+            --output "$GITHUB_WORKSPACE/base.json"
+
+      - name: Run candidate benchmarks
+        working-directory: pr
+        run: |
+          node --expose-gc perf/benchmark.mjs \
+            --package-root "$GITHUB_WORKSPACE/pr" \
+            --output "$GITHUB_WORKSPACE/pr.json"
+
+      - name: Compare results
+        working-directory: pr
+        run: |
+          node perf/compare.mjs \
+            --baseline "$GITHUB_WORKSPACE/base.json" \
+            --candidate "$GITHUB_WORKSPACE/pr.json" \
+            --threshold "$PERF_REGRESSION_THRESHOLD" \
+            --output "$GITHUB_WORKSPACE/report.md"
+
+      - name: Record PR number
+        if: always() && github.event_name == 'pull_request'
+        run: echo "${{ github.event.pull_request.number }}" > "$GITHUB_WORKSPACE/pr-number.txt"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: |
+            base.json
+            pr.json
+            report.md
+            pr-number.txt
+          if-no-files-found: ignore
