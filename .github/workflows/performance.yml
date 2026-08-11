@@ -52,26 +52,39 @@ jobs:
           npm ci
           npm run build
 
-      - name: Run baseline benchmarks
+      - name: Run alternating benchmark trials
         working-directory: pr
         run: |
-          node --expose-gc perf/benchmark.mjs \
-            --package-root "$GITHUB_WORKSPACE/base" \
-            --output "$GITHUB_WORKSPACE/base.json"
+          run_benchmark() {
+            node --expose-gc perf/benchmark.mjs \
+              --package-root "$1" \
+              --iterations 100000 \
+              --rounds 8 \
+              --output "$2"
+          }
 
-      - name: Run candidate benchmarks
-        working-directory: pr
-        run: |
-          node --expose-gc perf/benchmark.mjs \
-            --package-root "$GITHUB_WORKSPACE/pr" \
-            --output "$GITHUB_WORKSPACE/pr.json"
+          for trial in 1 2 3 4; do
+            if (( trial % 2 == 1 )); then
+              run_benchmark "$GITHUB_WORKSPACE/base" "$GITHUB_WORKSPACE/base-$trial.json"
+              run_benchmark "$GITHUB_WORKSPACE/pr" "$GITHUB_WORKSPACE/pr-$trial.json"
+            else
+              run_benchmark "$GITHUB_WORKSPACE/pr" "$GITHUB_WORKSPACE/pr-$trial.json"
+              run_benchmark "$GITHUB_WORKSPACE/base" "$GITHUB_WORKSPACE/base-$trial.json"
+            fi
+          done
 
       - name: Compare results
         working-directory: pr
         run: |
           node perf/compare.mjs \
-            --baseline "$GITHUB_WORKSPACE/base.json" \
-            --candidate "$GITHUB_WORKSPACE/pr.json" \
+            --baseline "$GITHUB_WORKSPACE/base-1.json" \
+            --baseline "$GITHUB_WORKSPACE/base-2.json" \
+            --baseline "$GITHUB_WORKSPACE/base-3.json" \
+            --baseline "$GITHUB_WORKSPACE/base-4.json" \
+            --candidate "$GITHUB_WORKSPACE/pr-1.json" \
+            --candidate "$GITHUB_WORKSPACE/pr-2.json" \
+            --candidate "$GITHUB_WORKSPACE/pr-3.json" \
+            --candidate "$GITHUB_WORKSPACE/pr-4.json" \
             --threshold "$PERF_REGRESSION_THRESHOLD" \
             --output "$GITHUB_WORKSPACE/report.md"
 
@@ -85,8 +98,8 @@ jobs:
         with:
           name: perf-results
           path: |
-            base.json
-            pr.json
+            base-*.json
+            pr-*.json
             report.md
             pr-number.txt
           if-no-files-found: ignore

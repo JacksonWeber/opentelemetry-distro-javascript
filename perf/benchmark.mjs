@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import { writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { trace } from "@opentelemetry/api";
 
 const DEFAULT_ITERATIONS = 100_000;
 const DEFAULT_ROUNDS = 12;
@@ -73,10 +73,18 @@ if (!Number.isInteger(rounds) || rounds <= 0) {
 }
 
 const distroEntryPoint = pathToFileURL(join(packageRoot, "dist", "esm", "index.js")).href;
+const requireFromPackage = createRequire(join(packageRoot, "package.json"));
+const { trace } = requireFromPackage("@opentelemetry/api");
 process.env.MICROSOFT_OTEL_SDKSTATS_DISABLED = "true";
 const { shutdownMicrosoftOpenTelemetry, useMicrosoftOpenTelemetry } = await import(
   distroEntryPoint
 );
+const spanProcessor = {
+  forceFlush: () => Promise.resolve(),
+  onEnd: () => {},
+  onStart: () => {},
+  shutdown: () => Promise.resolve(),
+};
 
 useMicrosoftOpenTelemetry({
   azureMonitor: { enabled: false },
@@ -96,10 +104,16 @@ useMicrosoftOpenTelemetry({
     winston: { enabled: false },
   },
   samplingRatio: 1,
+  spanProcessors: [spanProcessor],
   tracesPerSecond: 0,
 });
 
 const tracer = trace.getTracer("performance-test");
+const probeSpan = tracer.startSpan("benchmark-probe");
+if (!probeSpan.isRecording()) {
+  throw new Error(`Benchmark tracer for ${packageRoot} is not backed by a recording provider`);
+}
+probeSpan.end();
 const benchmarks = [];
 
 try {
