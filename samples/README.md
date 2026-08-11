@@ -23,6 +23,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [redactQueryStrings.ts][redactquerystrings] | Demonstrates how to redact URL query strings from telemetry to protect sensitive information.            |
 | [sampling.ts][sampling]                     | Demonstrates how to enable sampling to reduce data ingestion volume and control costs.                   |
 | [langchainInstrumentation.ts][langchaininstrumentation] | Demonstrates how to enable LangChain instrumentation to trace GenAI operations, including the `enableSensitiveData` toggle for capturing message content. |
+| [aks-langchain][akslangchain]               | Deploys a loader-based LangChain auto-instrumentation reproduction to AKS with a Dockerfile, Kubernetes manifest, and Azure Monitor walkthrough. |
 | [openaiInstrumentation.ts][openaiinstrumentation]       | Demonstrates how to enable OpenAI Agents SDK instrumentation to trace GenAI operations.             |
 | [a365Export.ts][a365export]                 | Demonstrates A365 observability export: token resolver setup, dual export with Azure Monitor, and span routing by tenant/agent. |
 | [a365ManualScopes.ts][a365manualscopes]     | Traces a full agent turn with manual scopes (InvokeAgent → Inference → ExecuteTool → Inference → Output) and cross-service context propagation. |
@@ -110,6 +111,7 @@ useMicrosoftOpenTelemetry({
 [redactquerystrings]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/redactQueryStrings.ts
 [sampling]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/sampling.ts
 [langchaininstrumentation]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/langchainInstrumentation.ts
+[akslangchain]: https://github.com/microsoft/opentelemetry-distro-javascript/tree/main/samples/aks-langchain
 [openaiinstrumentation]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/openaiInstrumentation.ts
 [a365export]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/a365Export.ts
 [a365manualscopes]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/a365ManualScopes.ts
