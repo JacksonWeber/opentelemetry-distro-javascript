@@ -54,11 +54,15 @@ az aks get-credentials \
 
 ## Create the Kubernetes secret
 
-Create the namespace:
+Create the namespace before creating the secret:
 
 ```bash
 kubectl create namespace langchain-aks
 ```
+
+`deployment.yaml` also declares this namespace. Creating it here is necessary
+because the namespaced secret is created before the full manifest is applied;
+the Namespace resource in the later `kubectl apply` is idempotent.
 
 Create the secret consumed by `deployment.yaml`:
 

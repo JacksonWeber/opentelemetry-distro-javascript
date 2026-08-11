@@ -102,6 +102,19 @@ server.listen(port, () => {
 });
 
 let isShuttingDown = false;
+function closeServer() {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 async function shutdown(signal) {
   if (isShuttingDown) {
     return;
@@ -110,14 +123,23 @@ async function shutdown(signal) {
   isShuttingDown = true;
   console.log(`Received ${signal}; shutting down`);
 
-  server.close(async (error) => {
-    if (error) {
-      console.error("HTTP server shutdown failed:", error);
-    }
+  let exitCode = 0;
 
+  try {
+    await closeServer();
+  } catch (error) {
+    console.error("HTTP server shutdown failed:", error);
+    exitCode = 1;
+  }
+
+  try {
     await shutdownTelemetry();
-    process.exitCode = error ? 1 : 0;
-  });
+  } catch (error) {
+    console.error("Telemetry shutdown failed:", error);
+    exitCode = 1;
+  }
+
+  process.exitCode = exitCode;
 }
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"));

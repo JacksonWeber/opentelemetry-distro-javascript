@@ -10,7 +10,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY app.mjs telemetry.mjs ./
 
-ENV NODE_OPTIONS="--import ./telemetry.mjs"
+ENV NODE_OPTIONS=--import=./telemetry.mjs
 
 USER node
 
