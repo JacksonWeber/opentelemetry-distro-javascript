@@ -134,5 +134,9 @@
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.8"
   },
+  "overrides": {
+    "keyv": "5.6.0",
+    "nanoid": "https://codeload.github.com/ai/nanoid/tar.gz/refs/tags/3.3.18"
+  },
   "sideEffects": false
 }
