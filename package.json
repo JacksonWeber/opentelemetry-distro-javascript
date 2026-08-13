@@ -136,7 +136,7 @@
   },
   "overrides": {
     "keyv": "5.6.0",
-    "nanoid": "https://codeload.github.com/ai/nanoid/tar.gz/refs/tags/3.3.18"
+    "nanoid": "https://codeload.github.com/ai/nanoid/tar.gz/9ad98052b316c5e707f8098ace509d2ae165e54d"
   },
   "sideEffects": false
 }
