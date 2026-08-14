@@ -453,86 +453,21 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 }
 
-const AZURE_CHAT_OPENAI_DEFAULT_MODEL = "gpt-3.5-turbo";
-const AZURE_DEPLOYMENT_FIELDS = [
-  "deployment_name",
-  "azureOpenAIApiDeploymentName",
-  "azure_openai_api_deployment_name",
-  "azure_deployment",
-] as const;
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value != null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
 function firstModelIdentifier(values: unknown[]): string | undefined {
   return values
     .map((value) => (value != null ? String(value).trim() : ""))
     .find((value) => value.length > 0);
 }
 
-function getSerializedKwargs(run: Run): Record<string, unknown> | undefined {
-  return asRecord(asRecord(run.serialized)?.kwargs);
-}
-
-function isAzureChatOpenAIRun(run: Run): boolean {
-  const provider = asRecord(run.extra?.metadata)?.ls_provider;
-  if (isString(provider) && provider.toLowerCase() === "azure") {
-    return true;
-  }
-
-  const id = asRecord(run.serialized)?.id;
-  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
-}
-
-function getAzureDeployment(run: Run): string | undefined {
-  const serializedKwargs = getSerializedKwargs(run);
-  const invocationParams = asRecord(run.extra?.invocation_params);
-  return firstModelIdentifier([
-    ...AZURE_DEPLOYMENT_FIELDS.map((field) => serializedKwargs?.[field]),
-    ...AZURE_DEPLOYMENT_FIELDS.map((field) => invocationParams?.[field]),
-  ]);
-}
-
-// Model - Helper to extract a trustworthy request-side model identifier from a
-// LangChain run. AzureChatOpenAI serializes its deployment under
-// `serialized.kwargs.deployment_name`, while its generic callback fields can
-// contain the unrelated BaseChatOpenAI default `gpt-3.5-turbo`.
+// Model - Helper to extract the request-side model identifier LangChain
+// publishes to callbacks.
 export function getRequestModel(run: Run): string | undefined {
-  const metadataModel = firstModelIdentifier([asRecord(run.extra?.metadata)?.ls_model_name]);
-  const invocationParams = asRecord(run.extra?.invocation_params);
-  const invocationModel = firstModelIdentifier([
+  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
+  return firstModelIdentifier([
+    run.extra?.metadata?.ls_model_name,
     invocationParams?.model,
     invocationParams?.model_name,
   ]);
-
-  if (!isAzureChatOpenAIRun(run)) {
-    return metadataModel ?? invocationModel;
-  }
-
-  const deployment = getAzureDeployment(run);
-  if (deployment) {
-    return deployment;
-  }
-
-  const serializedKwargs = getSerializedKwargs(run);
-  const serializedModel = firstModelIdentifier([
-    serializedKwargs?.model,
-    serializedKwargs?.model_name,
-  ]);
-  if (serializedModel) {
-    return serializedModel;
-  }
-
-  // `withConfig()` and `bindTools()` currently serialize AzureChatOpenAI as
-  // plain ChatOpenAI and drop the deployment, but `ls_provider` remains
-  // "azure". Ignore the known bogus default so the response model can be used
-  // as a best-effort fallback when the run completes.
-  return [invocationModel, metadataModel].find(
-    (model) => model != null && model !== AZURE_CHAT_OPENAI_DEFAULT_MODEL,
-  );
 }
 
 // Model - Helper to extract the response-side model (the model that actually
@@ -567,16 +502,15 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-// Model - Set request and response model attributes on the span. When
-// LangChain drops an Azure deployment alias, fall back to the server-reported
-// model rather than emitting its unrelated `gpt-3.5-turbo` default.
+// Model - Set request and response model attributes independently. The
+// integration that creates the LangChain run is responsible for publishing an
+// accurate request model; a server-reported response model is not equivalent.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
-  const effectiveRequestModel = requestModel ?? responseModel;
 
-  if (effectiveRequestModel) {
-    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);
+  if (requestModel) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, requestModel);
   }
 
   if (responseModel) {

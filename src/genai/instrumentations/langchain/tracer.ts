@@ -227,12 +227,6 @@ export class LangChainTracer extends BaseTracer {
         }
       }
       Utils.setModelAttribute(run, span);
-      if (operation === "chat") {
-        const model = Utils.getModel(run);
-        if (model) {
-          span.updateName(`${operation} ${model}`);
-        }
-      }
       Utils.setChoiceCountAttribute(run, span);
       Utils.setRequestAttributes(run, span);
       Utils.setResponseIdAttribute(run, span);
