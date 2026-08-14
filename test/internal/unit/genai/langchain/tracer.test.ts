@@ -297,6 +297,97 @@ describe("LangChainTracer", () => {
   });
 
   describe("_endTrace", () => {
+    it("keeps the Azure deployment alias in the final chat span name", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const startedRun = makeRun({
+        name: "AzureChatOpenAI",
+        serialized: {
+          id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+          kwargs: { deployment_name: "deployment-gpt-4o-mini" },
+        },
+        extra: {
+          metadata: { ls_model_name: "gpt-3.5-turbo", ls_provider: "azure" },
+          invocation_params: { model: "gpt-3.5-turbo" },
+        },
+      });
+      await lct.onRunCreate(startedRun);
+      assert.strictEqual(
+        (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        "chat deployment-gpt-4o-mini",
+      );
+
+      const completedRun = {
+        ...startedRun,
+        outputs: {
+          generations: [
+            [
+              {
+                message: {
+                  response_metadata: { model_name: "gpt-4o-mini-2024-07-18" },
+                },
+              },
+            ],
+          ],
+        },
+      } as unknown as Run;
+      const span = tracer.lastSpan!;
+      await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(completedRun);
+
+      assert.deepStrictEqual((span.updateName as ReturnType<typeof vi.fn>).mock.calls, [
+        ["chat deployment-gpt-4o-mini"],
+      ]);
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], "deployment-gpt-4o-mini");
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-mini-2024-07-18");
+    });
+
+    it("renames configured/tool-bound Azure spans using the response model fallback", async () => {
+      const tracer = createMockTracer();
+      const lct = new LangChainTracer(tracer);
+      const startedRun = makeRun({
+        name: "ChatOpenAI",
+        serialized: {
+          id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+          kwargs: { temperature: 0 },
+        },
+        extra: {
+          metadata: { ls_model_name: "gpt-3.5-turbo", ls_provider: "azure" },
+          invocation_params: {
+            model: "gpt-3.5-turbo",
+            tools: [{ type: "function", function: { name: "get_weather" } }],
+          },
+        },
+      });
+      await lct.onRunCreate(startedRun);
+      assert.strictEqual(
+        (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        "chat ChatOpenAI",
+      );
+
+      const completedRun = {
+        ...startedRun,
+        outputs: {
+          generations: [
+            [
+              {
+                message: {
+                  response_metadata: { model_name: "gpt-4o-mini-2024-07-18" },
+                },
+              },
+            ],
+          ],
+        },
+      } as unknown as Run;
+      const span = tracer.lastSpan!;
+      await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(completedRun);
+
+      assert.deepStrictEqual((span.updateName as ReturnType<typeof vi.fn>).mock.calls, [
+        ["chat gpt-4o-mini-2024-07-18"],
+      ]);
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], "gpt-4o-mini-2024-07-18");
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-mini-2024-07-18");
+    });
+
     it("ends the span with OK status on success", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);

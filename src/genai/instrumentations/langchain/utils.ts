@@ -453,21 +453,86 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 }
 
-// Model - Helper to extract the request-side model identifier from a LangChain
-// run. Reads only the LangChain-generic fields:
-//   - `extra.metadata.ls_model_name` (LangChain-set request model identifier)
-//   - `extra.invocation_params.model` / `extra.invocation_params.model_name`
+const AZURE_CHAT_OPENAI_DEFAULT_MODEL = "gpt-3.5-turbo";
+const AZURE_DEPLOYMENT_FIELDS = [
+  "deployment_name",
+  "azureOpenAIApiDeploymentName",
+  "azure_openai_api_deployment_name",
+  "azure_deployment",
+] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function firstModelIdentifier(values: unknown[]): string | undefined {
+  return values
+    .map((value) => (value != null ? String(value).trim() : ""))
+    .find((value) => value.length > 0);
+}
+
+function getSerializedKwargs(run: Run): Record<string, unknown> | undefined {
+  return asRecord(asRecord(run.serialized)?.kwargs);
+}
+
+function isAzureChatOpenAIRun(run: Run): boolean {
+  const provider = asRecord(run.extra?.metadata)?.ls_provider;
+  if (isString(provider) && provider.toLowerCase() === "azure") {
+    return true;
+  }
+
+  const id = asRecord(run.serialized)?.id;
+  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
+}
+
+function getAzureDeployment(run: Run): string | undefined {
+  const serializedKwargs = getSerializedKwargs(run);
+  const invocationParams = asRecord(run.extra?.invocation_params);
+  return firstModelIdentifier([
+    ...AZURE_DEPLOYMENT_FIELDS.map((field) => serializedKwargs?.[field]),
+    ...AZURE_DEPLOYMENT_FIELDS.map((field) => invocationParams?.[field]),
+  ]);
+}
+
+// Model - Helper to extract a trustworthy request-side model identifier from a
+// LangChain run. AzureChatOpenAI serializes its deployment under
+// `serialized.kwargs.deployment_name`, while its generic callback fields can
+// contain the unrelated BaseChatOpenAI default `gpt-3.5-turbo`.
 export function getRequestModel(run: Run): string | undefined {
-  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
-  return [
-    // LangChain-set request-side identifier (both v0 and v1)
-    run.extra?.metadata?.ls_model_name,
-    // Generic request model from invocation params
+  const metadataModel = firstModelIdentifier([asRecord(run.extra?.metadata)?.ls_model_name]);
+  const invocationParams = asRecord(run.extra?.invocation_params);
+  const invocationModel = firstModelIdentifier([
     invocationParams?.model,
     invocationParams?.model_name,
-  ]
-    .map((v) => (v != null ? String(v).trim() : ""))
-    .find((v) => v.length > 0);
+  ]);
+
+  if (!isAzureChatOpenAIRun(run)) {
+    return metadataModel ?? invocationModel;
+  }
+
+  const deployment = getAzureDeployment(run);
+  if (deployment) {
+    return deployment;
+  }
+
+  const serializedKwargs = getSerializedKwargs(run);
+  const serializedModel = firstModelIdentifier([
+    serializedKwargs?.model,
+    serializedKwargs?.model_name,
+  ]);
+  if (serializedModel) {
+    return serializedModel;
+  }
+
+  // `withConfig()` and `bindTools()` currently serialize AzureChatOpenAI as
+  // plain ChatOpenAI and drop the deployment, but `ls_provider` remains
+  // "azure". Ignore the known bogus default so the response model can be used
+  // as a best-effort fallback when the run completes.
+  return [invocationModel, metadataModel].find(
+    (model) => model != null && model !== AZURE_CHAT_OPENAI_DEFAULT_MODEL,
+  );
 }
 
 // Model - Helper to extract the response-side model (the model that actually
@@ -479,7 +544,7 @@ export function getResponseModel(run: Run): string | undefined {
   const v0Metadata = run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata as
     Record<string, unknown> | undefined;
 
-  return [
+  return firstModelIdentifier([
     // v1: response_metadata directly on message. Prefer the canonical OpenAI
     // Responses-API field (`model`) and fall back to the `model_name` alias
     // LangChain keeps "for backwards compat with chat completion calls" (see
@@ -492,9 +557,7 @@ export function getResponseModel(run: Run): string | undefined {
     // LLMResult.llmOutput.* (common for Chat Completions API).
     llmOutput?.model_name,
     llmOutput?.model,
-  ]
-    .map((v) => (v != null ? String(v).trim() : ""))
-    .find((v) => v.length > 0);
+  ]);
 }
 
 // Model - Helper kept for backwards compatibility (e.g. span naming). Prefers
@@ -504,43 +567,13 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-// Detects whether a LangChain run originated from `AzureChatOpenAI`. We look at
-// the serialized constructor id array (e.g. ["langchain", "chat_models",
-// "azure_openai", "AzureChatOpenAI"]) which LangChain JS surfaces alongside
-// every callback run. Used to scope the AzureChatOpenAI-specific request model
-// workaround in `setModelAttribute`.
-function isAzureChatOpenAIRun(run: Run): boolean {
-  if (!run.serialized || typeof run.serialized !== "object" || Array.isArray(run.serialized)) {
-    return false;
-  }
-  const id = (run.serialized as Record<string, unknown>).id;
-  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
-}
-
-// Model - Set request and response model attributes on the span using only
-// LangChain-generic identifiers.
-//
-// Note on request-model priority: for `AzureChatOpenAI` runs we deliberately
-// prefer the response-side model for `gen_ai.request.model`. LangChain JS does
-// not surface the configured deployment for `AzureChatOpenAI` through
-// `getLsParams()` or `invocationParams()` — `extra.metadata.ls_model_name`
-// falls back to the `BaseChatOpenAI` default of `"gpt-3.5-turbo"`, which would
-// otherwise be emitted as the request model regardless of what the caller
-// actually configured. The server-reported model (e.g.
-// `gpt-4o-mini-2024-07-18`) is a much closer approximation of the requested
-// model than that hardcoded default. See
-// https://github.com/langchain-ai/langchainjs/issues/10874.
-//
-// For all other clients (notably plain `ChatOpenAI` / Foundry deployments) the
-// request-side identifier is correct and is preferred so the deployment alias
-// or `model` kwarg is reported as `gen_ai.request.model`.
+// Model - Set request and response model attributes on the span. When
+// LangChain drops an Azure deployment alias, fall back to the server-reported
+// model rather than emitting its unrelated `gpt-3.5-turbo` default.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
-
-  const effectiveRequestModel = isAzureChatOpenAIRun(run)
-    ? (responseModel ?? requestModel)
-    : (requestModel ?? responseModel);
+  const effectiveRequestModel = requestModel ?? responseModel;
 
   if (effectiveRequestModel) {
     span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);
