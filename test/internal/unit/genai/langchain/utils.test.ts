@@ -11,7 +11,6 @@ import {
   setToolAttributes,
   setInputMessagesAttribute,
   setOutputMessagesAttribute,
-  getRequestModel,
   setModelAttribute,
   setChoiceCountAttribute,
   setRequestAttributes,
@@ -392,7 +391,7 @@ describe("setOutputMessagesAttribute", () => {
 });
 
 describe("setModelAttribute", () => {
-  it("extracts response model from response_metadata", () => {
+  it("extracts model from response_metadata", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -402,7 +401,7 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o",
       ),
     );
   });
@@ -440,7 +439,7 @@ describe("setModelAttribute", () => {
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 
-  it("does not infer a request model from response metadata", () => {
+  it("populates both request and response model when response_metadata is the only source", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -452,8 +451,10 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL),
-      "request model should remain unset when LangChain does not publish one",
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "request model should fall back to response model when no request-side identifier exists",
     );
     assert.ok(
       calls.some(
@@ -463,13 +464,50 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("keeps callback request and response models separate", () => {
+  it("uses the response-model workaround for AzureChatOpenAI's default request model", () => {
+    // LangChain JS hardcodes ls_model_name to "gpt-3.5-turbo" for AzureChatOpenAI
+    // (https://github.com/langchain-ai/langchainjs/issues/10874), so for that
+    // client the server-reported model is a closer approximation of the
+    // requested model than the request-side identifier.
     const span = makeSpan();
     const run = makeRun({
-      extra: {
-        metadata: { ls_model_name: "deployment-gpt-4o-mini" },
-        invocation_params: { model: "transport-model-value" },
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
       },
+      extra: { invocation_params: { model: "gpt-3.5-turbo" } },
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "request model should prefer the response-side identifier for AzureChatOpenAI",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model should come from response_metadata.model_name",
+    );
+  });
+
+  it("avoids the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression", () => {
+    // Regression test: AzureChatOpenAI sets ls_model_name to the BaseChatOpenAI
+    // default ("gpt-3.5-turbo") regardless of the configured deployment. The
+    // response-side model_name carries the actual served model, which we should
+    // emit as gen_ai.request.model to avoid misattributing the request.
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+      },
+      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
       outputs: {
         generations: [
           [
@@ -486,32 +524,134 @@ describe("setModelAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-gpt-4o-mini",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
       ),
-      "request model should use LangChain's callback metadata",
+      "request model should use the server-reported model rather than the LangChain default",
     );
     assert.ok(
-      calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
-      ),
-      "response model should come from response_metadata.model_name",
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
+      "request model must not fall back to the hardcoded ls_model_name default",
     );
-    assert.strictEqual(getRequestModel(run), "deployment-gpt-4o-mini");
   });
 
-  it("treats callback model identifiers uniformly across providers", () => {
+  it.each([
+    [
+      "withConfig()",
+      {
+        model: "gpt-3.5-turbo",
+        temperature: 0,
+        stream: false,
+        response_format: { type: "json_object" },
+      },
+    ],
+    [
+      "bindTools()",
+      {
+        model: "gpt-3.5-turbo",
+        temperature: 0,
+        stream: false,
+        tools: [{ type: "function", function: { name: "get_weather" } }],
+        tool_choice: "auto",
+      },
+    ],
+  ] as const)(
+    "applies the Azure request-model workaround to %s callback payloads",
+    (_scenario, invocationParams) => {
+      const span = makeSpan();
+      const run = makeRun({
+        serialized: {
+          id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+          kwargs: { temperature: 0, configuration: {} },
+        },
+        extra: {
+          metadata: {
+            ls_provider: "azure",
+            ls_model_name: "gpt-3.5-turbo",
+          },
+          invocation_params: invocationParams,
+        },
+        outputs: {
+          generations: [
+            [
+              {
+                message: {
+                  kwargs: { response_metadata: { model_name: "gpt-4o-mini-2024-07-18" } },
+                },
+              },
+            ],
+          ],
+        },
+      });
+
+      setModelAttribute(run, span);
+
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], "gpt-4o-mini-2024-07-18");
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-mini-2024-07-18");
+    },
+  );
+
+  it("preserves an explicit request model for wrapped Azure calls", () => {
+    const span = makeSpan();
     const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
       extra: {
-        metadata: { ls_model_name: "gpt-3.5-turbo", ls_provider: "custom-provider" },
+        metadata: {
+          ls_provider: "azure",
+          ls_model_name: "deployment-gpt-4o-mini",
+        },
+        invocation_params: { model: "deployment-gpt-4o-mini" },
+      },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                kwargs: { response_metadata: { model_name: "gpt-4o-mini-2024-07-18" } },
+              },
+            },
+          ],
+        ],
+      },
+    });
+
+    setModelAttribute(run, span);
+
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], "deployment-gpt-4o-mini");
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-mini-2024-07-18");
+  });
+
+  it("does not emit AzureChatOpenAI's default when no response model is available", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
+      extra: {
+        metadata: {
+          ls_provider: "azure",
+          ls_model_name: "gpt-3.5-turbo",
+        },
         invocation_params: { model: "gpt-3.5-turbo" },
       },
     });
-    assert.strictEqual(getRequestModel(run), "gpt-3.5-turbo");
+
+    setModelAttribute(run, span);
+
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], undefined);
   });
 
-  it("uses invocation_params.model when callback metadata has no model", () => {
+  it("keeps request and response model separate for non-Azure clients (e.g. ChatOpenAI)", () => {
+    // For plain ChatOpenAI / Foundry deployments the request-side identifier
+    // (deployment alias or `model` kwarg) is correct and must be used as-is for
+    // gen_ai.request.model. Only AzureChatOpenAI needs the response-model
+    // workaround.
     const span = makeSpan();
     const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
       extra: { invocation_params: { model: "deployment-o4-mini" } },
       outputs: {
         generations: [
@@ -531,7 +671,7 @@ describe("setModelAttribute", () => {
       calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
       ),
-      "request model should come from invocation_params.model",
+      "request model should come from invocation_params.model for non-Azure clients",
     );
     assert.ok(
       calls.some(
@@ -543,7 +683,7 @@ describe("setModelAttribute", () => {
       !calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "o4-mini-2025-04-16",
       ),
-      "response metadata must not overwrite the request model",
+      "non-Azure runs must not overwrite the request model with the response model",
     );
   });
 
@@ -595,7 +735,7 @@ describe("setModelAttribute", () => {
       calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
       ),
-      "request model should come from invocation_params.model for RAPI clients",
+      "request model should come from invocation_params.model for non-Azure RAPI clients",
     );
     assert.ok(
       calls.some(
@@ -688,9 +828,18 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("does not infer an RAPI request model from response_metadata.model", () => {
+  it("AzureChatOpenAI + RAPI: response_metadata.model still drives the workaround request model", () => {
+    // Combines the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression (see
+    // langchain-ai/langchainjs#10874) with the RAPI response shape. The
+    // response-side model must populate gen_ai.request.model (via the Azure
+    // workaround) AND gen_ai.response.model, even when LangChain only sets
+    // `model` (no `model_name` alias).
     const span = makeSpan();
     const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+      },
+      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
       outputs: {
         generations: [
           [
@@ -709,8 +858,10 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL),
-      "response metadata must not be reported as the request model",
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
+      ),
+      "AzureChatOpenAI request model should use response_metadata.model when model_name is absent",
     );
     assert.ok(
       calls.some(

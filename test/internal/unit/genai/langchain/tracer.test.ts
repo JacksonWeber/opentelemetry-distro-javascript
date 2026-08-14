@@ -297,43 +297,6 @@ describe("LangChainTracer", () => {
   });
 
   describe("_endTrace", () => {
-    it("keeps the request model in the chat span name", async () => {
-      const tracer = createMockTracer();
-      const lct = new LangChainTracer(tracer);
-      const startedRun = makeRun({
-        name: "ChatOpenAI",
-        extra: {
-          metadata: { ls_model_name: "deployment-gpt-4o-mini" },
-        },
-      });
-      await lct.onRunCreate(startedRun);
-      assert.strictEqual(
-        (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][0],
-        "chat deployment-gpt-4o-mini",
-      );
-
-      const completedRun = {
-        ...startedRun,
-        outputs: {
-          generations: [
-            [
-              {
-                message: {
-                  response_metadata: { model_name: "gpt-4o-mini-2024-07-18" },
-                },
-              },
-            ],
-          ],
-        },
-      } as unknown as Run;
-      const span = tracer.lastSpan!;
-      await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(completedRun);
-
-      assert.deepStrictEqual((span.updateName as ReturnType<typeof vi.fn>).mock.calls, []);
-      assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MODEL], "deployment-gpt-4o-mini");
-      assert.strictEqual(span.attrs[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-mini-2024-07-18");
-    });
-
     it("ends the span with OK status on success", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);

@@ -453,21 +453,21 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 }
 
-function firstModelIdentifier(values: unknown[]): string | undefined {
-  return values
-    .map((value) => (value != null ? String(value).trim() : ""))
-    .find((value) => value.length > 0);
-}
-
-// Model - Helper to extract the request-side model identifier LangChain
-// publishes to callbacks.
+// Model - Helper to extract the request-side model identifier from a LangChain
+// run. Reads only the LangChain-generic fields:
+//   - `extra.metadata.ls_model_name` (LangChain-set request model identifier)
+//   - `extra.invocation_params.model` / `extra.invocation_params.model_name`
 export function getRequestModel(run: Run): string | undefined {
   const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
-  return firstModelIdentifier([
+  return [
+    // LangChain-set request-side identifier (both v0 and v1)
     run.extra?.metadata?.ls_model_name,
+    // Generic request model from invocation params
     invocationParams?.model,
     invocationParams?.model_name,
-  ]);
+  ]
+    .map((v) => (v != null ? String(v).trim() : ""))
+    .find((v) => v.length > 0);
 }
 
 // Model - Helper to extract the response-side model (the model that actually
@@ -479,7 +479,7 @@ export function getResponseModel(run: Run): string | undefined {
   const v0Metadata = run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata as
     Record<string, unknown> | undefined;
 
-  return firstModelIdentifier([
+  return [
     // v1: response_metadata directly on message. Prefer the canonical OpenAI
     // Responses-API field (`model`) and fall back to the `model_name` alias
     // LangChain keeps "for backwards compat with chat completion calls" (see
@@ -492,7 +492,9 @@ export function getResponseModel(run: Run): string | undefined {
     // LLMResult.llmOutput.* (common for Chat Completions API).
     llmOutput?.model_name,
     llmOutput?.model,
-  ]);
+  ]
+    .map((v) => (v != null ? String(v).trim() : ""))
+    .find((v) => v.length > 0);
 }
 
 // Model - Helper kept for backwards compatibility (e.g. span naming). Prefers
@@ -502,15 +504,50 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-// Model - Set request and response model attributes independently. The
-// integration that creates the LangChain run is responsible for publishing an
-// accurate request model; a server-reported response model is not equivalent.
+const AZURE_CHAT_OPENAI_DEFAULT_MODEL = "gpt-3.5-turbo";
+
+// `withConfig()` and `bindTools()` serialize AzureChatOpenAI as plain
+// ChatOpenAI, but retain `ls_provider=azure` in callback metadata.
+function isAzureChatOpenAIRun(run: Run): boolean {
+  const provider = run.extra?.metadata?.ls_provider;
+  if (isString(provider) && provider.toLowerCase() === "azure") {
+    return true;
+  }
+
+  if (!run.serialized || typeof run.serialized !== "object" || Array.isArray(run.serialized)) {
+    return false;
+  }
+  const id = (run.serialized as Record<string, unknown>).id;
+  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
+}
+
+// Model - Set request and response model attributes on the span using only
+// LangChain-generic identifiers.
+//
+// Note on request-model priority: LangChain JS does not surface the configured
+// deployment for `AzureChatOpenAI` through `getLsParams()` or
+// `invocationParams()` — `extra.metadata.ls_model_name` falls back to the
+// `BaseChatOpenAI` default of `"gpt-3.5-turbo"`. For that known-bogus value we
+// use the server-reported model as a closer approximation, while preserving an
+// explicit request-side identifier when LangChain provides one. See
+// https://github.com/langchain-ai/langchainjs/issues/10874.
+//
+// For all other clients (notably plain `ChatOpenAI` / Foundry deployments) the
+// request-side identifier is correct and is preferred so the deployment alias
+// or `model` kwarg is reported as `gen_ai.request.model`.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
 
-  if (requestModel) {
-    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, requestModel);
+  const useAzureResponseFallback =
+    isAzureChatOpenAIRun(run) &&
+    (requestModel == null || requestModel === AZURE_CHAT_OPENAI_DEFAULT_MODEL);
+  const effectiveRequestModel = useAzureResponseFallback
+    ? responseModel
+    : (requestModel ?? responseModel);
+
+  if (effectiveRequestModel) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);
   }
 
   if (responseModel) {
