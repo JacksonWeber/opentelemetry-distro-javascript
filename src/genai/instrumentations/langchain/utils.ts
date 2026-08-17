@@ -504,47 +504,13 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-const AZURE_CHAT_OPENAI_DEFAULT_MODEL = "gpt-3.5-turbo";
-
-// `withConfig()` and `bindTools()` serialize AzureChatOpenAI as plain
-// ChatOpenAI, but retain `ls_provider=azure` in callback metadata.
-function isAzureChatOpenAIRun(run: Run): boolean {
-  const provider = run.extra?.metadata?.ls_provider;
-  if (isString(provider) && provider.toLowerCase() === "azure") {
-    return true;
-  }
-
-  if (!run.serialized || typeof run.serialized !== "object" || Array.isArray(run.serialized)) {
-    return false;
-  }
-  const id = (run.serialized as Record<string, unknown>).id;
-  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
-}
-
-// Model - Set request and response model attributes on the span using only
+// Model - Set request and response model attributes independently using
 // LangChain-generic identifiers.
-//
-// Note on request-model priority: LangChain JS does not surface the configured
-// deployment for `AzureChatOpenAI` through `getLsParams()` or
-// `invocationParams()` — `extra.metadata.ls_model_name` falls back to the
-// `BaseChatOpenAI` default of `"gpt-3.5-turbo"`. For that known-bogus value we
-// use the server-reported model as a closer approximation, while preserving an
-// explicit request-side identifier when LangChain provides one. See
-// https://github.com/langchain-ai/langchainjs/issues/10874.
-//
-// For all other clients (notably plain `ChatOpenAI` / Foundry deployments) the
-// request-side identifier is correct and is preferred so the deployment alias
-// or `model` kwarg is reported as `gen_ai.request.model`.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
 
-  const useAzureResponseFallback =
-    isAzureChatOpenAIRun(run) &&
-    (requestModel == null || requestModel === AZURE_CHAT_OPENAI_DEFAULT_MODEL);
-  const effectiveRequestModel = useAzureResponseFallback
-    ? responseModel
-    : (requestModel ?? responseModel);
+  const effectiveRequestModel = requestModel ?? responseModel;
 
   if (effectiveRequestModel) {
     span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);
