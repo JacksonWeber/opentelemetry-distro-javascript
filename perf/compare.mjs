@@ -41,6 +41,11 @@ async function loadBenchmarks(paths) {
   for (const path of paths) {
     const document = JSON.parse(await readFile(path, "utf8"));
     for (const benchmark of document.benchmarks) {
+      if (benchmark.unit !== "operations/s") {
+        throw new Error(
+          `Benchmark ${benchmark.name} in ${path} has unsupported unit ${benchmark.unit}`,
+        );
+      }
       const samples = benchmark.samples ?? [benchmark.stats?.median];
       if (
         samples.length === 0 ||
@@ -93,9 +98,9 @@ const names = [...new Set([...baseline.keys(), ...candidate.keys()])].sort();
 const lines = [
   "### Performance comparison",
   "",
-  `Regressions over ${threshold.toFixed(1)}% fail the build. Lower ns/op is better. Medians aggregate samples from alternating trials.`,
+  `Throughput drops over ${threshold.toFixed(1)}% fail the build. Higher operations/s is better. Medians aggregate samples from alternating trials.`,
   "",
-  "| Scenario | Baseline (ns/op) | Candidate (ns/op) | Delta | Status |",
+  "| Scenario | Baseline (operations/s) | Candidate (operations/s) | Delta | Status |",
   "| --- | ---: | ---: | ---: | :---: |",
 ];
 let regressed = false;
@@ -118,7 +123,7 @@ for (const name of names) {
 
   const delta = ((candidateMedian - baselineMedian) / baselineMedian) * 100;
   const gating = Boolean(baselineResult.gating || candidateResult.gating);
-  const failed = gating && delta > threshold;
+  const failed = gating && delta < -threshold;
   regressed ||= failed;
   lines.push(
     `| \`${name}\` | ${formatNumber(baselineMedian)} | ${formatNumber(candidateMedian)} | ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}% | ${failed ? "fail" : "pass"} |`,

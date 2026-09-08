@@ -23,6 +23,7 @@
     "test:esm-build": "node --input-type=module -e \"import('./dist/esm/distro/instrumentations.js').then(()=>console.log('esm import ok')).catch((e)=>{console.error(e);process.exit(1);})\"",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "perf:otlp": "npm run build && node --expose-gc perf/benchmark.mjs",
     "docs": "typedoc",
     "lint-staged": "lint-staged",
     "prepublishOnly": "npm run build",
