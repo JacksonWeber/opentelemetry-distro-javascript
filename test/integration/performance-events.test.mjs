@@ -150,6 +150,43 @@ test("named logs preserve measured identity, exact units, optional run and signe
   assert.equal(correlated["vcs.ref.head.revision"].stringValue, raw.revision);
 });
 
+test("raw artifact validation rejects noncanonical scenario identities in either or both collections", async (t) => {
+  for (const collections of [["benchmarks"], ["memory"], ["benchmarks", "memory"]]) {
+    for (const [index, scenario] of scenarios.entries()) {
+      for (const field of ["test", "category"]) {
+        for (const label of [
+          `relabeled_${scenario[field]}`,
+          scenarios.find((other) => other[field] !== scenario[field])[field],
+        ]) {
+          await t.test(`${collections.join(" and ")}: ${scenario.name} ${field}=${label}`, () => {
+            const raw = fixture();
+            for (const collection of collections) {
+              raw[collection][index][field] = label;
+            }
+            assert.throws(() => createEvents(raw), {
+              name: "AssertionError",
+              message: new RegExp(
+                `^SDK scenario ${field} identity mismatch for ${scenario.name}\\b`,
+              ),
+            });
+          });
+        }
+      }
+    }
+  }
+});
+
+test("raw artifact validation accepts independently reordered scenarios without changing events", () => {
+  const raw = fixture();
+  const expected = createEvents(raw);
+  raw.benchmarks.reverse();
+  raw.memory.push(raw.memory.shift());
+  const payload = createEvents(raw);
+  assert.deepEqual(payload.resourceLogs[0].resource, expected.resourceLogs[0].resource);
+  assert.equal(records(payload).length, records(expected).length);
+  assert.deepEqual(new Set(records(payload)), new Set(records(expected)));
+});
+
 test("raw artifact validation rejects missing, non-finite, mismatched or fabricated summaries", () => {
   const mutations = [
     (raw) => {
@@ -204,7 +241,19 @@ test("raw artifact validation rejects missing, non-finite, mismatched or fabrica
       raw.benchmarks.pop();
     },
     (raw) => {
+      raw.memory.pop();
+    },
+    (raw) => {
+      raw.benchmarks[0].name = raw.benchmarks[1].name;
+    },
+    (raw) => {
       raw.memory[0].name = raw.memory[1].name;
+    },
+    (raw) => {
+      raw.benchmarks[0].name = "unknown";
+    },
+    (raw) => {
+      raw.memory[0].name = "unknown";
     },
   ];
   for (const mutate of mutations) {

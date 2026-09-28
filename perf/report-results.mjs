@@ -100,6 +100,16 @@ export function createEvents(result) {
       scenarios.map((item) => item.name).sort(),
       "Expected one result for each SDK scenario",
     );
+    for (const benchmark of collection) {
+      const scenario = scenarios.find((item) => item.name === benchmark.name);
+      for (const field of ["test", "category"]) {
+        assert.equal(
+          benchmark[field],
+          scenario[field],
+          `SDK scenario ${field} identity mismatch for ${benchmark.name}`,
+        );
+      }
+    }
   }
   for (const benchmark of result.benchmarks) {
     assert.equal(benchmark.unit, "ns/op", "Unexpected timing unit");
@@ -122,9 +132,6 @@ export function createEvents(result) {
     );
   }
   for (const benchmark of result.memory) {
-    const throughput = result.benchmarks.find((item) => item.name === benchmark.name);
-    assert.equal(benchmark.test, throughput.test, "Memory test identity mismatch");
-    assert.equal(benchmark.category, throughput.category, "Memory category mismatch");
     assert.equal(benchmark.trials?.length, memoryTrials, "Memory trial count mismatch");
     for (const trial of benchmark.trials) {
       timestamp(trial.completedAt);

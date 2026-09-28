@@ -115,8 +115,10 @@ baseline, in `By`; heap and retained-heap per-operation deltas are in
 bytes or a leak diagnosis. Negative and zero observations remain valid.
 
 The second command validates the raw observations and writes native OTLP JSON
-named log events (`microsoft.opentelemetry.benchmark.result`). Each event has
-`test.case.name`, `test.suite.name`, `benchmark.metric`, numeric `benchmark.value`,
+named log events (`microsoft.opentelemetry.benchmark.result`). Both throughput
+and memory observations must match the canonical scenario names, test cases,
+and categories defined in `perf/benchmark-sdk.mjs`, regardless of collection order.
+Each event has `test.case.name`, `test.suite.name`, `benchmark.metric`, numeric `benchmark.value`,
 `benchmark.unit`, `benchmark.statistic`, and actual iteration/round or
 memory-trial counts. Case names are distinct from scenario labels. Metrics are
 `microsoft.opentelemetry.benchmark.throughput` and
