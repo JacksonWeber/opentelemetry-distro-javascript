@@ -3,7 +3,15 @@
 
 import { describe, it, expect } from "vitest";
 
-import { MessageRole, Modality } from "../../../../src/a365/contracts.js";
+import {
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
+  MessageRole,
+  Modality,
+  ToolCallAction,
+  ToolCallOutcomeStatus,
+  ToolPolicyDecision,
+} from "../../../../src/a365/contracts.js";
 import type { InputMessages, OutputMessages } from "../../../../src/a365/contracts.js";
 import {
   isWrappedMessages,
@@ -12,6 +20,7 @@ import {
   normalizeInputMessages,
   normalizeOutputMessages,
   serializeMessages,
+  serializeToolPayload,
 } from "../../../../src/a365/message-utils.js";
 
 describe("isWrappedMessages", () => {
@@ -316,5 +325,316 @@ describe("serializeMessages", () => {
     expect(parsed[0].parts[0].server_tool_call.endpoint).toBe("/api");
     expect(parsed[1].parts[0].server_tool_call_response.status).toBe("ok");
     expect(parsed[2].parts[0].type).toBe("custom_annotation");
+  });
+});
+
+describe("serializeToolPayload", () => {
+  const serializationError = '{"serialization_error":"Failed to serialize execute tool payload."}';
+  const legacySerializationError = '{"error":"serialization failed"}';
+
+  it("returns undefined for nullish payloads", () => {
+    expect(serializeToolPayload(undefined)).toBeUndefined();
+    expect(serializeToolPayload(null)).toBeUndefined();
+  });
+
+  it("serializes extension data as metadata without replacing declared fields", () => {
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      parameters: {
+        query: "GDPR",
+        filters: { sensitivity: "high", includeArchived: true },
+      },
+      resources: [
+        {
+          id: "doc-1",
+          type: "document",
+          provider: "sharepoint",
+          extension_data: { provider_resource_type: "page" },
+        },
+      ],
+      extension_data: {
+        action: "write",
+        schema_version: "9.9",
+        request_context: { scenario: "enterprise-search" },
+      },
+    });
+
+    const serialized = serializeToolPayload(payload);
+    const parsed = JSON.parse(serialized as string);
+
+    expect(parsed).toEqual({
+      schema_version: "1.0",
+      action: "read",
+      parameters: {
+        query: "GDPR",
+        filters: { sensitivity: "high", includeArchived: true },
+      },
+      resources: [
+        {
+          id: "doc-1",
+          type: "document",
+          provider: "sharepoint",
+          metadata: { provider_resource_type: "page" },
+        },
+      ],
+      metadata: {
+        action: "write",
+        schema_version: "9.9",
+        request_context: { scenario: "enterprise-search" },
+      },
+    });
+  });
+
+  it("keeps nested extension keys inside metadata", () => {
+    const payload = new ExecuteToolCallResult({
+      outcome: {
+        status: ToolCallOutcomeStatus.SUCCESS,
+        code: "ok",
+        extension_data: { code: "provider-code", status: "provider-status" },
+      },
+      resources: [
+        {
+          policy: {
+            decision: ToolPolicyDecision.ALLOW,
+            extension_data: { decision: "conditional-allow" },
+          },
+        },
+      ],
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({
+      schema_version: "1.0",
+      outcome: {
+        status: "success",
+        code: "ok",
+        metadata: { code: "provider-code", status: "provider-status" },
+      },
+      resources: [
+        {
+          policy: {
+            decision: "allow",
+            metadata: { decision: "conditional-allow" },
+          },
+        },
+      ],
+    });
+  });
+
+  it("omits nullish declared fields and preserves nulls inside mappings and arrays", () => {
+    const payload = new ExecuteToolCallResult({
+      outcome: {
+        status: ToolCallOutcomeStatus.SUCCESS,
+        provider_code: null as any,
+        extension_data: { provider_outcome: null, attempts: 0 },
+      },
+      data: { content: null, matches: [null, 1] },
+      extension_data: { provider_result: null, cached: false },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({
+      schema_version: "1.0",
+      outcome: {
+        status: "success",
+        metadata: { provider_outcome: null, attempts: 0 },
+      },
+      data: { content: null, matches: [null, 1] },
+      metadata: { provider_result: null, cached: false },
+    });
+  });
+
+  it("omits explicit null schema versions", () => {
+    const payload = new ExecuteToolCallArguments({ schema_version: null as any });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({});
+  });
+
+  it("preserves __proto__ as an own mapping key", () => {
+    const data = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(data, "__proto__", {
+      value: { provider: "graph" },
+      enumerable: true,
+    });
+    data.kept = 1;
+
+    const serialized = serializeToolPayload(
+      new ExecuteToolCallResult({
+        data,
+        extension_data: data,
+      }),
+    );
+
+    const parsed = JSON.parse(serialized as string);
+
+    expect(parsed.schema_version).toBe("1.0");
+    expect(parsed.data.kept).toBe(1);
+    expect(parsed.metadata.kept).toBe(1);
+    expect(Object.hasOwn(parsed.data, "__proto__")).toBe(true);
+    expect(Object.hasOwn(parsed.metadata, "__proto__")).toBe(true);
+    expect(parsed.data["__proto__"]).toEqual({ provider: "graph" });
+    expect(parsed.metadata["__proto__"]).toEqual({ provider: "graph" });
+  });
+
+  it.each([
+    ["action", new ExecuteToolCallArguments({ action: "READ" as any })],
+    [
+      "outcome status",
+      new ExecuteToolCallResult({ outcome: { status: "ok" as ToolCallOutcomeStatus } }),
+    ],
+    [
+      "policy decision",
+      new ExecuteToolCallResult({
+        resources: [{ policy: { decision: "permit" as ToolPolicyDecision } }],
+      }),
+    ],
+  ])("returns the exact fallback for an invalid %s", (_name, payload) => {
+    expect(serializeToolPayload(payload)).toBe(serializationError);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "returns the exact fallback for non-finite number %s",
+    (value) => {
+      expect(serializeToolPayload(new ExecuteToolCallResult({ data: { value } }))).toBe(
+        serializationError,
+      );
+    },
+  );
+
+  it.each([
+    ["undefined", undefined],
+    ["function", () => "unsupported"],
+    ["symbol", Symbol("unsupported")],
+    ["bigint", BigInt(1)],
+  ])("returns the exact fallback for unsupported %s mapping values", (_name, value) => {
+    expect(serializeToolPayload(new ExecuteToolCallArguments({ parameters: { value } }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback for sparse arrays", () => {
+    const values = new Array(2);
+    values[1] = 1;
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data: { values } }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback when a sparse array inherits an indexed value", () => {
+    const values = new Array(1);
+    Object.setPrototypeOf(values, { 0: "inherited" });
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data: { values } }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback for symbol-keyed mappings", () => {
+    const data = { kept: true };
+    Object.defineProperty(data, Symbol("unsupported"), {
+      value: "dropped",
+      enumerable: true,
+    });
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data }))).toBe(serializationError);
+    expect(serializeToolPayload(new ExecuteToolCallResult({ extension_data: data }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback when extension data is not a mapping", () => {
+    expect(
+      serializeToolPayload(
+        new ExecuteToolCallArguments({ extension_data: [] as unknown as Record<string, unknown> }),
+      ),
+    ).toBe(serializationError);
+  });
+
+  it("serializes supported JavaScript scalar and collection values", () => {
+    const payload = new ExecuteToolCallResult({
+      data: {
+        timestamp: new Date("2026-01-02T03:04:05.000Z"),
+        bytes: new Uint8Array([0, 1, 2, 3]),
+        scopes: new Set(["read", "write"]),
+      },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string).data).toEqual({
+      timestamp: "2026-01-02T03:04:05.000Z",
+      bytes: "AAECAw==",
+      scopes: ["read", "write"],
+    });
+  });
+
+  it("serializes repeated references that are not cycles", () => {
+    const shared = { value: true };
+    const payload = new ExecuteToolCallResult({
+      data: { first: shared, second: shared },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string).data).toEqual({
+      first: { value: true },
+      second: { value: true },
+    });
+  });
+
+  it("returns the legacy fallback for circular generic payloads", () => {
+    const payload: Record<string, unknown> = { a: 1 };
+    payload.self = payload;
+
+    expect(serializeToolPayload(payload)).toBe(legacySerializationError);
+  });
+
+  it("returns the exact fallback for circular ExecuteToolCallArguments payloads", () => {
+    const extension_data: Record<string, unknown> = {};
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      extension_data,
+    });
+    extension_data.self = payload;
+
+    expect(serializeToolPayload(payload)).toBe(serializationError);
+  });
+
+  it("returns the exact fallback for circular ExecuteToolCallResult payloads", () => {
+    const data: Record<string, unknown> = { count: 1 };
+    const result = new ExecuteToolCallResult({
+      outcome: { status: ToolCallOutcomeStatus.SUCCESS },
+      data,
+    });
+    data.self = data;
+
+    expect(serializeToolPayload(result)).toBe(serializationError);
+  });
+
+  it("returns the exact fallback for bigint payloads", () => {
+    expect(
+      serializeToolPayload(
+        new ExecuteToolCallArguments({
+          action: ToolCallAction.READ,
+          extension_data: { count: BigInt(1) },
+        }),
+      ),
+    ).toBe(serializationError);
+  });
+
+  it("returns the exact fallback when payload serialization throws", () => {
+    const extension_data = {
+      get value(): never {
+        throw new Error("boom");
+      },
+    };
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      extension_data,
+    });
+
+    expect(serializeToolPayload(payload)).toBe(serializationError);
+  });
+
+  it("returns the exact fallback when typed payload detection throws", () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+
+    expect(serializeToolPayload(proxy)).toBe(serializationError);
   });
 });

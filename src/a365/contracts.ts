@@ -9,6 +9,27 @@
  */
 
 import type { SpanKind, TimeInput, Link, Context, TraceState } from "@opentelemetry/api";
+import type { ExecuteToolCallArguments } from "./tool-call-models.js";
+
+export {
+  ToolCallAction,
+  ToolCallOutcomeStatus,
+  ToolPolicyDecision,
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
+} from "./tool-call-models.js";
+export type {
+  ToolCallExtensionData,
+  ToolCallIdentifier,
+  ToolCallContainer,
+  ToolCallResource,
+  ToolCallResultOutcome,
+  ToolCallResultSensitivity,
+  ToolCallResultPolicy,
+  ToolCallResultSecurity,
+  ToolCallResultPagination,
+  ToolCallResultResource,
+} from "./tool-call-models.js";
 
 // ---------------------------------------------------------------------------
 // Default finish reason (per OTel spec)
@@ -422,8 +443,8 @@ export interface InvokeAgentScopeDetails {
 export interface ToolCallDetails {
   /** Name of the tool being called (required). */
   toolName: string;
-  /** Arguments passed to the tool, as an object or serialized string. */
-  arguments?: Record<string, unknown> | string;
+  /** Arguments passed to the tool, as an object, execute-tool schema model, or serialized string. */
+  arguments?: Record<string, unknown> | ExecuteToolCallArguments | string;
   /** Unique identifier of the tool call. */
   toolCallId?: string;
   /** Human-readable description of the tool. */
