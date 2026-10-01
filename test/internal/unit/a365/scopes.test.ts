@@ -1200,6 +1200,34 @@ describe("Request content and message serialization (span attributes)", () => {
     });
   });
 
+  describe("shared request context span attributes", () => {
+    it("should write request.operationSource to service.name", () => {
+      const scope = InvokeAgentScope.start(
+        { ...testRequest, operationSource: "agent-framework" },
+        {},
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe(
+        "agent-framework",
+      );
+    });
+
+    it("should write request.sessionId on output spans", () => {
+      const scope = OutputScope.start(
+        { ...testRequest, sessionId: "session-output-123" },
+        { messages: "Hello" },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe(
+        "session-output-123",
+      );
+    });
+  });
+
   describe("InvokeAgentScope – GenAI request and response parameters", () => {
     it("should record all request attributes and response-at-start attributes", () => {
       const requestParameters: GenAiRequestParameters = {
@@ -1758,6 +1786,143 @@ describe("Request content and message serialization (span attributes)", () => {
         serializationError,
       );
     });
+  });
+});
+
+describe("recordAttributes last-write-wins behavior", () => {
+  const testAgentDetails: AgentDetails = {
+    agentId: "test-agent",
+    agentName: "Test Agent",
+    tenantId: "test-tenant-456",
+  };
+
+  beforeEach(() => {
+    sharedExporter.reset();
+  });
+
+  const getLastSpan = (): ReadableSpan => {
+    const spans = sharedExporter.getFinishedSpans();
+    expect(spans.length).toBeGreaterThanOrEqual(1);
+    return spans[spans.length - 1];
+  };
+
+  it("should overwrite builder-populated attributes when recordAttributes sees the same keys", () => {
+    const scope = InvokeAgentScope.start(
+      {
+        conversationId: "conv-owned",
+        sessionId: "session-owned",
+        operationSource: "service-owned",
+        channel: { name: "Teams", description: "https://teams.example" },
+      },
+      {},
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]: "Override Agent",
+      [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]: "override-conv",
+      [OpenTelemetryConstants.SESSION_ID_KEY]: "override-session",
+      [OpenTelemetryConstants.SERVICE_NAME_KEY]: "override-service",
+      "custom.attribute": "custom value",
+    });
+    scope.dispose();
+
+    const attributes = getLastSpan().attributes;
+    expect(attributes[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBe("Override Agent");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("override-conv");
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("override-session");
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("override-service");
+    expect(attributes["custom.attribute"]).toBe("custom value");
+  });
+
+  it("should overwrite the span builder operation name", () => {
+    const scope = ExecuteToolScope.start(
+      { conversationId: "conv-op-name" },
+      { toolName: "search" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]:
+        OpenTelemetryConstants.CHAT_OPERATION_NAME,
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(
+      OpenTelemetryConstants.CHAT_OPERATION_NAME,
+    );
+  });
+
+  it("should accept known keys that were absent when the scope was created", () => {
+    const scope = InferenceScope.start(
+      { conversationId: "conv-late-known", channel: { name: "Teams" } },
+      { operationName: InferenceOperationType.CHAT, model: "gpt-4" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.CHANNEL_LINK_KEY]: "https://teams.example/deep-link",
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe(
+      "https://teams.example/deep-link",
+    );
+  });
+
+  it("should let a generic write overwrite a late typed setter", () => {
+    const scope = InferenceScope.start(
+      { conversationId: "conv-late-owned" },
+      { operationName: InferenceOperationType.CHAT, model: "gpt-4" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]: 10,
+    });
+    scope.recordInputTokens(20);
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]: 30,
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(30);
+  });
+
+  it("should keep custom recordAttributes keys last-write-wins across repeated calls", () => {
+    const scope = ExecuteToolScope.start(
+      { conversationId: "conv-custom-repeat" },
+      { toolName: "search" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({ "custom.repeat": "first" });
+    scope.recordAttributes({ "custom.repeat": "second" });
+    scope.dispose();
+
+    expect(getLastSpan().attributes["custom.repeat"]).toBe("second");
+  });
+
+  it("should support iterable attributes while skipping blank keys", () => {
+    const scope = InvokeAgentScope.start(
+      { conversationId: "conv-iterable", channel: { name: "Teams" } },
+      {},
+      testAgentDetails,
+    );
+
+    scope.recordAttributes([
+      [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, "override-conv"],
+      ["", "ignored"],
+      ["   ", "also ignored"],
+      ["custom.iterable", 42],
+    ]);
+    scope.dispose();
+
+    const attributes = getLastSpan().attributes;
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("override-conv");
+    expect(attributes["custom.iterable"]).toBe(42);
+    expect(attributes[""]).toBeUndefined();
+    expect(attributes["   "]).toBeUndefined();
   });
 });
 

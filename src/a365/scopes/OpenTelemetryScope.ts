@@ -14,6 +14,7 @@ import type {
   AgentDetails,
   UserDetails,
   SpanDetails,
+  Request,
   InputMessagesParam,
   OutputMessagesParam,
 } from "../contracts.js";
@@ -59,6 +60,7 @@ export abstract class OpenTelemetryScope {
    * @param agentDetails Optional agent details. Tenant ID is read from `agentDetails.tenantId`.
    * @param spanDetails Optional span configuration including parent context, start/end times, span kind, and span links.
    * @param userDetails Optional human caller identity details.
+   * @param request Optional request context shared by all scope types.
    */
   protected constructor(
     operationName: string,
@@ -66,6 +68,7 @@ export abstract class OpenTelemetryScope {
     agentDetails?: AgentDetails,
     spanDetails?: SpanDetails,
     userDetails?: UserDetails,
+    request?: Request,
   ) {
     const parentContext = spanDetails?.parentContext;
     const startTime = spanDetails?.startTime;
@@ -100,6 +103,13 @@ export abstract class OpenTelemetryScope {
       this.customStartTime = startTime;
     }
     this.customEndTime = endTime;
+
+    // Set shared request context
+    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request?.sessionId);
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request?.conversationId);
+    this.setTagMaybe(OpenTelemetryConstants.SERVICE_NAME_KEY, request?.operationSource);
+    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request?.channel?.name);
+    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request?.channel?.description);
 
     // Set agent details
     if (agentDetails) {
@@ -165,7 +175,7 @@ export abstract class OpenTelemetryScope {
     this.span.recordException(error);
   }
 
-  /** Records multiple attribute key/value pairs. */
+  /** Records multiple attribute key/value pairs using last-write-wins semantics. */
   public recordAttributes(
     attributes:
       Iterable<[string, AttributeValue]> | Record<string, AttributeValue> | null | undefined,
@@ -173,17 +183,9 @@ export abstract class OpenTelemetryScope {
     if (!attributes) return;
 
     if (Symbol.iterator in Object(attributes) && typeof attributes !== "string") {
-      for (const [key, value] of attributes as Iterable<[string, AttributeValue]>) {
-        if (key && typeof key === "string" && key.trim()) {
-          this.span.setAttribute(key, value);
-        }
-      }
+      this.recordAttributeEntries(attributes as Iterable<[string, AttributeValue]>);
     } else if (typeof attributes === "object") {
-      for (const key of Object.keys(attributes as Record<string, AttributeValue>)) {
-        if (key && key.trim()) {
-          this.span.setAttribute(key, (attributes as Record<string, AttributeValue>)[key]);
-        }
-      }
+      this.recordAttributeEntries(Object.entries(attributes as Record<string, AttributeValue>));
     }
   }
 
@@ -209,6 +211,20 @@ export abstract class OpenTelemetryScope {
         [name]: value as string | number | boolean | string[] | number[],
       });
     }
+  }
+
+  private recordAttributeEntries(attributes: Iterable<[string, AttributeValue]>): void {
+    for (const [key, value] of attributes) {
+      if (!OpenTelemetryScope.isNonBlankAttributeKey(key)) {
+        continue;
+      }
+
+      this.span.setAttribute(key, value);
+    }
+  }
+
+  private static isNonBlankAttributeKey(key: string): boolean {
+    return typeof key === "string" && key.trim().length > 0;
   }
 
   /**
