@@ -36,6 +36,7 @@ import type {
 } from "../../../../src/a365/index.js";
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
+import { partitionByIdentity } from "../../../../src/a365/exporter/utils.js";
 
 let sharedExporter: InMemorySpanExporter;
 let contextManager: AsyncLocalStorageContextManager;
@@ -751,6 +752,9 @@ describe("Scopes", () => {
         providerName: "openai",
         inputTokens: 100,
         outputTokens: 150,
+        responseModel: "gpt-4-2024-11-20",
+        cacheReadInputTokens: 12,
+        cacheWriteInputTokens: 7,
         finishReasons: ["stop"],
       };
 
@@ -783,6 +787,22 @@ describe("Scopes", () => {
       expect(keySet).toContain("user.name");
       expect(keySet).toContain("user.email");
       expect(keySet).toContain("client.address");
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          {
+            key: OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY,
+            val: "gpt-4-2024-11-20",
+          },
+          {
+            key: OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
+            val: 12,
+          },
+          {
+            key: OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+            val: 7,
+          },
+        ]),
+      );
       scope?.dispose();
       spy.mockRestore();
     });
@@ -834,9 +854,49 @@ describe("Scopes", () => {
       expect(() => scope?.recordOutputMessages(["Generated response"])).not.toThrow();
       expect(() => scope?.recordInputTokens(50)).not.toThrow();
       expect(() => scope?.recordOutputTokens(100)).not.toThrow();
+      expect(() => scope?.recordResponseModel("gpt-4-2024-11-20")).not.toThrow();
+      expect(() => scope?.recordCacheReadInputTokens(12)).not.toThrow();
+      expect(() => scope?.recordCacheWriteInputTokens(7)).not.toThrow();
       expect(() => scope?.recordFinishReasons(["stop", "length"])).not.toThrow();
       scope?.dispose();
+
+      const spans = sharedExporter.getFinishedSpans();
+      const attributes = spans[spans.length - 1].attributes;
+      expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY]).toBe("gpt-4-2024-11-20");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(12);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(7);
     });
+
+    it.each<[InferenceDetails["operationName"], string]>([
+      [InferenceOperationType.CHAT, "chat"],
+      [InferenceOperationType.TEXT_COMPLETION, "text_completion"],
+      [InferenceOperationType.GENERATE_CONTENT, "generate_content"],
+      ["chat", "chat"],
+      ["text_completion", "text_completion"],
+      ["generate_content", "generate_content"],
+    ])(
+      "should normalize %s to %s and retain the inference span for export",
+      (operationName, expected) => {
+        const spanCountBefore = sharedExporter.getFinishedSpans().length;
+        const scope = InferenceScope.start(
+          testRequest,
+          { operationName, model: "gpt-4" },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const spans = sharedExporter.getFinishedSpans();
+        expect(spans).toHaveLength(spanCountBefore + 1);
+        const span = spans[spans.length - 1];
+        expect(span.attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(expected);
+        expect(span.name).toBe(`${expected} gpt-4`);
+        const groups = partitionByIdentity([span]);
+        expect(groups.size).toBe(1);
+        expect(groups.get(`${testAgentDetails.tenantId}:${testAgentDetails.agentId}`)).toEqual([
+          span,
+        ]);
+      },
+    );
 
     it("should set conversationId and channel tags when provided", () => {
       const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");

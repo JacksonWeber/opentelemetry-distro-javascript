@@ -139,6 +139,11 @@ When you provide it, those scopes write `microsoft.session.id` directly on the c
 span instead of relying on later baggage enrichment. `OutputScope` does not currently
 propagate `request.sessionId` directly.
 
+`InferenceScope` accepts `InferenceOperationType` enum values or the canonical strings
+`chat`, `text_completion`, and `generate_content` in `details.operationName`. Both
+`gen_ai.operation.name` and the span name use the canonical operation; for example,
+`InferenceOperationType.TEXT_COMPLETION` with model `gpt-4` produces `text_completion gpt-4`.
+
 `InvokeAgentScope.start()` captures request parameters immediately, while `recordResponseParameters()`
 captures response and usage values after the agent completes.
 
@@ -203,7 +208,8 @@ baggageScope.run(() => {
   baggage only.
 - Automatic baggage-to-span enrichment only runs for recognized GenAI spans whose
   `gen_ai.operation.name` is `invoke_agent`, `execute_tool`, `output_messages`,
-  `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
+  `apply_guardrail`, `chat`, `text_completion`, `generate_content`, `Chat`, `TextCompletion`, or
+  `GenerateContent`.
 - For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
   their exact instrumentation scope names when the final GenAI operation is not available at
   span start. Configured custom tracer names, scope prefixes, and unrelated child scopes are not

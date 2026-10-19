@@ -459,8 +459,8 @@ export interface ToolCallDetails {
 
 /** Details for an inference call. */
 export interface InferenceDetails {
-  /** The inference operation type (e.g. chat, text completion). */
-  operationName: InferenceOperationType;
+  /** The inference operation enum value or canonical OpenTelemetry operation name. */
+  operationName: InferenceOperationType | "chat" | "text_completion" | "generate_content";
   /** Name of the model used for inference. */
   model: string;
   /** Name of the provider serving the model. */
@@ -469,6 +469,12 @@ export interface InferenceDetails {
   inputTokens?: number;
   /** Number of output (completion) tokens. */
   outputTokens?: number;
+  /** Canonical model name returned by the provider. */
+  responseModel?: string;
+  /** Number of input tokens read from cache. */
+  cacheReadInputTokens?: number;
+  /** Number of input tokens written to cache. */
+  cacheWriteInputTokens?: number;
   /** Finish reasons returned by the model. */
   finishReasons?: string[];
   /** The model's thought process / reasoning trace. */
