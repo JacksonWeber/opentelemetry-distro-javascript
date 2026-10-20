@@ -77,6 +77,7 @@ Design guidelines:
 
 - Use the in-repo Azure Monitor code directly for provider creation and standard instrumentation
 - When Azure Monitor export is requested, attach the Azure Monitor exporter using the migrated code
+- Compress Azure Monitor ingestion requests through the distro's shared HTTP transport, including distro-managed SDKStats, while preserving plain JSON for custom endpoints. Exporter-internal SDKStats transport remains owned by the exporter dependency.
 - When Azure Monitor export is not requested, create providers without the exporter (now trivial since the code is in-repo)
 - Add OTLP export for traces, logs, and metrics on top of the providers
 - Add hooks for custom span processors, log processors, metric readers, and views

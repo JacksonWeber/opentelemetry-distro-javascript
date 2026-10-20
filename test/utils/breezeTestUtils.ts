@@ -4,6 +4,25 @@
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import type { Resource } from "@opentelemetry/resources";
 import type { SdkLogRecord } from "@opentelemetry/sdk-logs";
+import type { PipelineRequest } from "@azure/core-rest-pipeline";
+import { gunzipSync } from "node:zlib";
+import type { TelemetryItem as Envelope } from "./models/index.js";
+
+export function parseBreezeRequest(request: PipelineRequest): Envelope[] {
+  if (request.headers.get("content-encoding") === "gzip") {
+    if (!Buffer.isBuffer(request.body)) {
+      throw new Error("Expected a binary gzip request body");
+    }
+    if (request.headers.get("content-length") !== String(request.body.byteLength)) {
+      throw new Error("Content-Length does not match the compressed body");
+    }
+    return JSON.parse(gunzipSync(request.body).toString("utf8")) as Envelope[];
+  }
+  if (typeof request.body !== "string") {
+    throw new Error("Expected a serialized JSON request body");
+  }
+  return JSON.parse(request.body) as Envelope[];
+}
 
 export function successfulBreezeResponse(count: number): any {
   return {

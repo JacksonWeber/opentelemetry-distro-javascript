@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Features Added
+
+- Add automatic gzip request-body compression for Azure Monitor telemetry and distro-managed SDKStats sent to recognized ingestion endpoints, preserving plain JSON for custom endpoints.
+
 ## [1.5.0] - 2026-10-06
 
 ### Bugs Fixed

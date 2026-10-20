@@ -3,9 +3,9 @@
 
 import { assertCount, assertLogExpectation } from "../../utils/assert.js";
 import { LogBasicScenario } from "../../utils/basic.js";
-import { successfulBreezeResponse } from "../../utils/breezeTestUtils.js";
+import { parseBreezeRequest, successfulBreezeResponse } from "../../utils/breezeTestUtils.js";
 import type { TelemetryItem as Envelope } from "../../utils/models/index.js";
-import { describe, it, afterEach, vi } from "vitest";
+import { describe, it, afterEach, expect, vi } from "vitest";
 import type { HttpClient, PipelineRequest } from "@azure/core-rest-pipeline";
 
 /** TODO: Add winston-transport check functional test */
@@ -25,7 +25,8 @@ describe("Log Exporter Scenarios", () => {
           if (request.url !== "https://dc.services.visualstudio.com/v2.1/track") {
             throw new Error(`unexpected request to url ${request.url}`);
           }
-          const envelope = JSON.parse(request.body as string) as Envelope[];
+          expect(request.headers.get("content-encoding")).toBe("gzip");
+          const envelope = parseBreezeRequest(request);
           ingest.push(...envelope);
           return Promise.resolve({
             headers: request.headers,

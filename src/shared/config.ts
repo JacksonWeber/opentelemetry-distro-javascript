@@ -17,6 +17,7 @@ import type { Sampler } from "@opentelemetry/sdk-trace-base";
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
 import { EnvConfig } from "./envConfig.js";
 import { isAksResourceDetectorPopulated } from "../azureMonitor/utils/common.js";
+import { createAzureMonitorHttpClient } from "../azureMonitor/utils/httpClient.js";
 import {
   azureAksDetector,
   azureAppServiceDetector,
@@ -151,6 +152,9 @@ export class InternalConfig {
     }
     // ENV configuration will take precedence over other configurations
     this._mergeEnvConfig();
+    this.azureMonitorExporterOptions.httpClient = createAzureMonitorHttpClient(
+      this.azureMonitorExporterOptions.httpClient,
+    );
   }
 
   private _mergeEnvConfig(): void {

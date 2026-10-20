@@ -1,13 +1,30 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, beforeEach, afterEach, expect } from "vitest";
+import { describe, it, beforeEach, afterEach, expect, vi } from "vitest";
+import { createHttpHeaders } from "@azure/core-rest-pipeline";
+import type { PipelineRequest } from "@azure/core-rest-pipeline";
+import type { MeterProvider } from "@opentelemetry/sdk-metrics";
 
 import { SdkStatsManager } from "../../../../src/sdkstats/manager.js";
 import {
   SDKSTATS_DISABLED_ENV,
+  SdkStatsDistroFeature,
+  setSdkStatsFeature,
   _resetSdkStatsStateForTest,
 } from "../../../../src/sdkstats/state.js";
+import { recordSuccess, _resetAllForTest } from "../../../../src/sdkstats/networkStats.js";
+import { parseBreezeRequest, successfulBreezeResponse } from "../../../utils/breezeTestUtils.js";
+
+const { sendRequest } = vi.hoisted(() => ({ sendRequest: vi.fn() }));
+
+vi.mock("../../../../src/azureMonitor/utils/httpClient.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../../src/azureMonitor/utils/httpClient.js")>();
+  return {
+    createAzureMonitorHttpClient: () => actual.createAzureMonitorHttpClient({ sendRequest }),
+  };
+});
 
 function getReaderInterval(provider: unknown): number | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,7 +35,14 @@ function getReaderInterval(provider: unknown): number | undefined {
 
 describe("sdkstats/manager", () => {
   beforeEach(() => {
+    sendRequest.mockReset().mockImplementation(async (request: PipelineRequest) => ({
+      request,
+      headers: createHttpHeaders({ "content-type": "application/json" }),
+      status: 200,
+      bodyAsText: JSON.stringify(successfulBreezeResponse(parseBreezeRequest(request).length)),
+    }));
     _resetSdkStatsStateForTest();
+    _resetAllForTest();
     delete process.env[SDKSTATS_DISABLED_ENV];
     SdkStatsManager._resetForTest();
   });
@@ -26,6 +50,7 @@ describe("sdkstats/manager", () => {
   afterEach(async () => {
     await SdkStatsManager.getInstance().shutdown();
     SdkStatsManager._resetForTest();
+    vi.unstubAllEnvs();
   });
 
   it("returns a singleton instance", () => {
@@ -44,6 +69,31 @@ describe("sdkstats/manager", () => {
     const initialized = await manager.initialize();
     expect(initialized).toBe(true);
     expect(manager.isInitialized).toBe(true);
+  });
+
+  it.each([
+    ["https://westus-0.in.applicationinsights.azure.com", "gzip"],
+    ["https://stats.example.com", undefined],
+  ])("uses the shared transport for both SDKStats pipelines at %s", async (endpoint, encoding) => {
+    vi.stubEnv(
+      "APPLICATIONINSIGHTS_STATS_CONNECTION_STRING",
+      `InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;IngestionEndpoint=${endpoint}`,
+    );
+    const manager = SdkStatsManager.getInstance();
+    expect(await manager.initialize()).toBe(true);
+    setSdkStatsFeature(SdkStatsDistroFeature.OTLP_EXPORT);
+    recordSuccess("otlp", "localhost");
+    const longProvider = Reflect.get(manager, "_longMeterProvider") as MeterProvider;
+    const shortProvider = Reflect.get(manager, "_shortMeterProvider") as MeterProvider;
+    await longProvider.forceFlush();
+    await shortProvider.forceFlush();
+
+    expect(sendRequest).toHaveBeenCalledTimes(2);
+    for (const [request] of sendRequest.mock.calls as [PipelineRequest][]) {
+      expect(request.url).toBe(`${endpoint}/v2.1/track`);
+      expect(request.headers.get("content-encoding")).toBe(encoding);
+      expect(parseBreezeRequest(request).length).toBeGreaterThan(0);
+    }
   });
 
   it("is idempotent — repeated initialize() calls return true without re-initializing", async () => {

@@ -28,6 +28,7 @@ import { Logger } from "../shared/logging/index.js";
 import { getModuleParentURL } from "../shared/module.js";
 import { isSdkStatsEnabled, setSdkStatsShutdown } from "./state.js";
 import { SdkStatsMetrics } from "./metrics.js";
+import { createAzureMonitorHttpClient } from "../azureMonitor/utils/httpClient.js";
 
 /**
  * Default long export interval (24 hours) for Feature/Instrumentation
@@ -159,6 +160,7 @@ export class SdkStatsManager {
         process.env[SDKSTATS_CONNECTION_STRING_ENV] ?? NON_EU_CONNECTION_STRING;
 
       const emptyResource = resourceFromAttributes({});
+      const httpClient = createAzureMonitorHttpClient();
 
       // Long-interval pipeline (24h) — Feature / Feature.instrumentations.
       // Skipped when `networkOnly` is true (AzMon exporter owns those).
@@ -166,6 +168,7 @@ export class SdkStatsManager {
         const longExporter = new AzureMonitorStatsbeatExporter({
           connectionString,
           disableOfflineStorage: true,
+          httpClient,
         });
         const longReader = new PeriodicExportingMetricReader({
           exporter: longExporter,
@@ -181,6 +184,7 @@ export class SdkStatsManager {
       const shortExporter = new AzureMonitorStatsbeatExporter({
         connectionString,
         disableOfflineStorage: true,
+        httpClient,
       });
       const shortReader = new PeriodicExportingMetricReader({
         exporter: shortExporter,

@@ -268,6 +268,24 @@ Behavior:
 | `enablePerformanceCounters`       | `boolean`                     | `true`   | Enable performance counter collection                                                     |
 | `browserSdkLoaderOptions`         | `BrowserSdkLoaderOptions`     | disabled | Application Insights browser SDK loader config (`enabled`, `connectionString`)            |
 
+#### Azure Monitor request compression
+
+Azure Monitor telemetry batches (traces, logs, metrics, standard metrics, and
+performance counters) and distro-managed SDKStats use gzip request-body compression
+for HTTPS ingestion endpoints under `applicationinsights.azure.com`,
+`applicationinsights.azure.us`, `applicationinsights.azure.cn`, `monitor.azure.com`,
+`monitor.azure.us`, and `monitor.azure.cn`, as well as `dc.services.visualstudio.com`.
+Custom endpoints and proxies outside these domains continue to receive plain JSON.
+Compression is evaluated against the actual request destination, including retries
+and accepted redirects. Persisted telemetry remains uncompressed and is compressed
+when replayed to a supported endpoint.
+
+Custom `azureMonitorExporterOptions.httpClient` implementations receive a binary
+gzip body with `Content-Encoding: gzip` and the compressed `Content-Length` for
+supported endpoints. Existing content encodings are preserved. Live Metrics and
+OTLP compression settings are unchanged. SDKStats exporters created internally by
+the Azure Monitor exporter dependency retain that package's transport behavior.
+
 ### OTLP via environment variables
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` and OTLP export is enabled automatically — no code changes needed. Signal-specific variables (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, etc.) override the base endpoint.

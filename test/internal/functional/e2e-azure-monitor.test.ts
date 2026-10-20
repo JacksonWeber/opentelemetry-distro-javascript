@@ -15,7 +15,7 @@ import * as opentelemetry from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { HttpClient, PipelineRequest } from "@azure/core-rest-pipeline";
 import type { TelemetryItem as Envelope } from "../../utils/models/index.js";
-import { successfulBreezeResponse } from "../../utils/breezeTestUtils.js";
+import { parseBreezeRequest, successfulBreezeResponse } from "../../utils/breezeTestUtils.js";
 
 const TEST_IKEY = "1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
 const TEST_CONNECTION_STRING = `InstrumentationKey=${TEST_IKEY}`;
@@ -27,13 +27,9 @@ function createCapturingHttpClient(ingest: Envelope[]): HttpClient {
   return {
     sendRequest: vi.fn().mockImplementation((request: PipelineRequest) => {
       // Only capture requests aimed at the Breeze ingestion endpoint
-      if (request.body && typeof request.body === "string") {
-        try {
-          const items = JSON.parse(request.body) as Envelope[];
-          ingest.push(...items);
-        } catch {
-          // ignore non-JSON requests (e.g. QuickPulse pings)
-        }
+      if (new URL(request.url).pathname.endsWith("/track")) {
+        expect(request.headers.get("content-encoding")).toBe("gzip");
+        ingest.push(...parseBreezeRequest(request));
       }
       return Promise.resolve({
         headers: request.headers,
