@@ -24,7 +24,6 @@ const TEMPORARY_SUFFIX = ".tmp";
 // can still overflow this limit once that metadata is appended.
 const MAX_FILENAME_COMPONENT_BYTES = 255;
 const WINDOWS_PROBE_DIRECTORY = ["Microsoft", "A365", "otel-durable"] as const;
-const POSIX_DEFAULT_LEAF_PREFIX = "a365-otel-durable";
 const APPLICATION_PARTITION_PREFIX = "app-";
 const PROCESS_START_CWD = process.cwd();
 
@@ -481,6 +480,19 @@ async function resolveStorageRoot(
   logger: ILogger,
   directoryAccessControl?: DirectoryAccessControl,
 ): Promise<string> {
+  if (process.platform !== "win32") {
+    const root = options.storageDirectory;
+    if (typeof root !== "string" || root.trim().length === 0 || !isAbsolute(root)) {
+      throw new Error(
+        "Unix durable storage requires storageDirectory to specify an existing absolute directory provisioned by the customer",
+      );
+    }
+    if (!(await fs.stat(root)).isDirectory()) {
+      throw new Error(`Durable storageDirectory must be an existing directory: ${root}`);
+    }
+    return initializeRoot(partitionedStorageRoot(root), false);
+  }
+
   if (options.storageDirectory !== undefined) {
     return initializeExplicitRoot(options.storageDirectory, directoryAccessControl);
   }
@@ -519,7 +531,6 @@ async function initializeRoot(
       throw error;
     }
   }
-
   return verifyRoot(root, directoryAccessControl);
 }
 
@@ -543,38 +554,23 @@ async function verifyRoot(
   root: string,
   directoryAccessControl?: DirectoryAccessControl,
 ): Promise<string> {
-  let stats = await fs.lstat(root);
-  if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    throw new Error(`Durable storage root must be a real directory: ${root}`);
-  }
-
   if (process.platform === "win32") {
+    await verifyWindowsDirectory(root);
     await directoryAccessControl?.hardenDirectory(root);
-    stats = await fs.lstat(root);
-    if (stats.isSymbolicLink() || !stats.isDirectory()) {
-      throw new Error(`Durable storage root must be a real directory: ${root}`);
-    }
-  } else {
-    const uid = process.getuid?.();
-    if (uid !== undefined && stats.uid !== uid) {
-      throw new Error(`Durable storage root must be owned by the current user: ${root}`);
-    }
-
-    await fs.chmod(root, OWNER_DIRECTORY_MODE);
-    stats = await fs.lstat(root);
-    if (
-      stats.isSymbolicLink() ||
-      !stats.isDirectory() ||
-      (uid !== undefined && stats.uid !== uid)
-    ) {
-      throw new Error(
-        `Durable storage root must be a real directory owned by the current user: ${root}`,
-      );
-    }
+    await verifyWindowsDirectory(root);
+  } else if (!(await fs.stat(root)).isDirectory()) {
+    throw new Error(`Durable storage cache must be a directory: ${root}`);
   }
 
   await probeRoot(root);
   return root;
+}
+
+async function verifyWindowsDirectory(directory: string): Promise<void> {
+  const stats = await fs.lstat(directory);
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error(`Durable storage root must be a real directory: ${directory}`);
+  }
 }
 
 let defaultDirectoryAccessControl: DirectoryAccessControl | undefined;
@@ -595,11 +591,7 @@ function resolveDirectoryAccessControl(
 }
 
 function defaultStorageBaseRoot(candidate: string): string {
-  if (process.platform === "win32") {
-    return join(candidate, ...WINDOWS_PROBE_DIRECTORY);
-  }
-
-  return join(candidate, `${POSIX_DEFAULT_LEAF_PREFIX}-${process.getuid?.() ?? "unknown"}`);
+  return join(candidate, ...WINDOWS_PROBE_DIRECTORY);
 }
 
 export function applicationPartition(): string {
@@ -626,10 +618,7 @@ function partitionedStorageRoot(root: string): string {
 }
 
 function storageRootCandidates(): string[] {
-  const candidates =
-    process.platform === "win32"
-      ? [process.env.LOCALAPPDATA, process.env.TEMP, os.tmpdir()]
-      : [process.env.TMPDIR, "/var/tmp", "/tmp"];
+  const candidates = [process.env.LOCALAPPDATA, process.env.TEMP, os.tmpdir()];
 
   return [...new Set(candidates.filter(isNonEmptyString))];
 }
