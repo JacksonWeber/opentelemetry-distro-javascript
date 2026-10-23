@@ -7,7 +7,7 @@ required.
 
 ## Prerequisites
 
-- Patched Node.js: 22.23.4+ on 22.x, 24.22.1+ on 24.x, or 26.12.1+ on 26.x (see [runtime requirements](../../README.md#nodejs-runtime-requirements)).
+- Node.js 22 or later.
 - An Agent365 blueprint application with a client secret.
 - An Agent365 agent application in the same Microsoft Entra tenant.
 - The Agent365 agent application must have the
