@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Bugs Fixed
+- Require Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on their respective release lines for security fixes.
 - **Breaking change on Unix (Linux/macOS):** Agent365 offline buffering/replay now requires an explicitly configured, existing, absolute `durableDelivery.storageDirectory`. No automatic Unix temporary-directory fallback or root creation. Missing/invalid roots are logged and disable only disk buffering/replay; online export continues. Customers provision and maintain ownership, permissions (normally a private service-account-owned `0700` root), ACLs, and path-replacement protection; the SDK does not inspect or repair Unix access controls. Windows behavior, explicit-root cache identities, record compatibility, and retention limits are unchanged. Old temporary backlogs are not automatically migrated; see [storage provisioning and migration](A365_DOCUMENTATION.md#storage-provisioning-and-migration).
 
 ### Features Added
