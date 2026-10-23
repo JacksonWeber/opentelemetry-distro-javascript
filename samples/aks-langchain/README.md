@@ -20,7 +20,7 @@ be auto-instrumented.
 
 ## Prerequisites
 
-- Node.js 22 or later for local runs
+- Patched Node.js for local runs: 22.23.4+ on 22.x, 24.22.1+ on 24.x, or 26.12.1+ on 26.x (see [runtime requirements](../../README.md#nodejs-runtime-requirements))
 - An Azure subscription with:
   - an AKS cluster
   - an Azure Container Registry (ACR)
@@ -29,6 +29,12 @@ be auto-instrumented.
 - Azure CLI, `kubectl`, and Docker
 
 ## Build and push the image
+
+The Dockerfile pins `node:22.23.4-bookworm-slim` and verifies the runtime before
+installing dependencies. Changing the Dockerfile does not patch an already
+running pod: rebuild the image and roll out the new image to patch deployed
+workloads. Keep the Node.js image pin and its runtime check aligned on future
+updates.
 
 Run this command from `samples/aks-langchain`, replacing `<acr-name>`:
 

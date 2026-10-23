@@ -12,11 +12,41 @@ Microsoft OpenTelemetry distribution for Node.js — one import, one call, full 
 npm install @microsoft/opentelemetry
 ```
 
+### Node.js runtime requirements
+
+Use the [October 21, 2026 Node.js security releases](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
+or a later patched release on your supported Node.js line:
+
+| Node.js line | Minimum version |
+| ------------ | --------------- |
+| 22.x | 22.23.4 |
+| 24.x | 24.22.1 |
+| 26.x | 26.12.1 |
+
+The package engine range is `^22.23.4 || ^24.22.1 || >=26.12.1`. End-of-life
+Node.js 23 and 25 are excluded; future stable majors remain eligible. CI retains
+Node.js 22 and 24 coverage.
+
+This baseline addresses the full advisory, not only the Brotli decoder issue:
+DNS, TLS hostname validation, HTTP keep-alive handling, snapshot entropy caches,
+permission checks, the Node.js 26 ZIP issue, and the applicable bundled c-ares,
+CA certificate, OpenSSL, SQLite, and Undici updates. The SDK's opt-in browser
+injection uses Node's Brotli decoder and encoder; A365 uses Node's global
+`fetch`. Encoding-only compression paths are also included as precautionary
+hardening, not because the advisory identifies a vulnerable encoder.
+Compression behavior and wire formats are unchanged.
+
+**Updating this package does not update Node.js.** npm engine requirements can
+be advisory: application owners must patch the runtime that actually starts
+the process, rebuild and redeploy container images, and update hosted or
+embedded runtimes through their provider. Disabling browser injection does not
+address other runtime vulnerabilities or A365's HTTP transport.
+
 > **Important:** Import and call `useMicrosoftOpenTelemetry()` as early as possible in your application entry point so instrumentations can patch libraries before they are loaded.
 
 ### ESM Support
 
-> **Note:** This package requires Node.js 22.0.0 or later. Its ESM loader flow relies on `--import` and `node:module.register()`. For background on why startup ordering matters, see the [OpenTelemetry ESM Support documentation](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md).
+> **Note:** Use a patched Node.js version from the [runtime requirements](#nodejs-runtime-requirements). The ESM loader flow relies on `--import` and `node:module.register()`. For background on why startup ordering matters, see the [OpenTelemetry ESM Support documentation](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md).
 
 For ESM applications, instrumentation hooks must be registered before any instrumented modules (for example `http`, `express`, `axios`, or loggers) are loaded. This is a fundamental ESM constraint: modules cannot be instrumented after they are already loaded.
 

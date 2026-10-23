@@ -32,7 +32,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 
 ## Prerequisites
 
-- [Node.js LTS](https://github.com/nodejs/release#release-schedule) (>= 20.0.0)
+- Patched [Node.js](https://nodejs.org/): 22.23.4+ on 22.x, 24.22.1+ on 24.x, or 26.12.1+ on 26.x (see [runtime requirements](../README.md#nodejs-runtime-requirements))
 - [TypeScript](https://www.typescriptlang.org/) (install via `npm install -g typescript`)
 - An [Azure subscription](https://azure.microsoft.com/free/) with an [Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview) resource
 

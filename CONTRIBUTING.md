@@ -14,16 +14,26 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Development Setup
 
-1. Install [Node.js](https://nodejs.org/) 22 or later.
+1. Install patched [Node.js](https://nodejs.org/): 22.23.4+ on 22.x, 24.22.1+ on 24.x, or 26.12.1+ on 26.x. See the [runtime requirements](README.md#nodejs-runtime-requirements).
 2. Install dependencies.
 3. Run formatting, linting, and tests before opening a pull request.
 
 ```bash
+node scripts/check-node-version.cjs
 npm install
 npm run build
 npm run lint
 npm test
 ```
+
+CI pins Node.js 22.23.4 and 24.22.1 and checks `process.versions.node` before
+running repository commands. The guard checks the actual executable, not a
+version argument or environment override. Its dependency-free regression tests
+can be run with `node --test test/integration/node-version.test.mjs`.
+Keep runtime pins and package/lockfile engine metadata aligned when updating
+the security baseline. GitHub Actions' embedded Node runtimes are managed by
+the action/runner providers; `actions/setup-node` only selects the runtime for
+subsequent repository commands.
 
 ### Using package-lock.json
 
@@ -66,7 +76,8 @@ the required proxy rather than using this workflow to bypass its restrictions.
 
 ## SDK performance benchmarks
 
-After building, run the standalone harness on Node.js 22 or later. It measures
+After building, run the standalone harness on a patched Node.js version from
+the [runtime requirements](README.md#nodejs-runtime-requirements). It measures
 recording span creation (with and without an attribute), counter aggregation,
 and log emission through the built SDK. Non-exporting processors and a metric
 reader keep serialization, network transport, and exporter batching out of the
